@@ -1,0 +1,10 @@
+body { margin: 0; overflow: hidden; }
+#gameCanvas { background: #2c3e50; }
+#hud {
+    position: fixed;
+    top: 10px;
+    left: 10px;
+    color: white;
+    font-family: Arial;
+}
+#alert { color: #e74c3c; }
