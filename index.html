@@ -10,24 +10,27 @@
     <div class="game-container">
         <canvas id="gameCanvas"></canvas>
         <div class="hud">
-            <div class="score">Score: <span id="scoreValue">0</span></div>
-            <div class="speed">Speed: <span id="speedValue">0</span> km/h</div>
+            <div id="score">Score: 0</div>
+            <div id="speed">Speed: 0 km/h</div>
+            <div id="speedLimit">Speed Limit: 70 km/h</div>
+            <div id="message"></div>
         </div>
-        <div id="gameOver" class="overlay">
-            <h2>Game Over</h2>
-            <p>Your score: <span id="finalScore">0</span></p>
-            <button id="restartBtn">Play Again</button>
+        <div id="gameMenu">
+            <h1>Endless DOSTH Road Survival</h1>
+            <button id="startButton">Start Game</button>
+            <div class="instructions">
+                <h2>Controls:</h2>
+                <p>↑ - Accelerate</p>
+                <p>↓ - Decelerate/Brake</p>
+                <p>← → - Switch Lanes</p>
+                <p>SPACE - Pause/Resume</p>
+            </div>
         </div>
-        <div id="pauseMenu" class="overlay">
-            <h2>Game Paused</h2>
-            <button id="resumeBtn">Resume</button>
+        <div id="gameOver" class="hidden">
+            <h1>Game Over</h1>
+            <p id="finalScore">Score: 0</p>
+            <button id="restartButton">Play Again</button>
         </div>
-    </div>
-    <div class="instructions">
-        <h3>Controls:</h3>
-        <p>↑/↓: Accelerate/Decelerate</p>
-        <p>←/→: Switch Lanes</p>
-        <p>Space: Pause/Resume</p>
     </div>
     <script src="game.js"></script>
 </body>
