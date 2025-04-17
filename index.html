@@ -1,14 +1,29 @@
+<!-- index.html -->
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-    <title>DOSTH v1 Simulator</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Endless DOSTH Road Survival</title>
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
-    <canvas id="gameCanvas" width="800" height="600"></canvas>
-    <div id="hud">
-        <p>Speed: <span id="speed">0</span> km/h</p>
-        <p id="alert"></p>
+    <div class="game-container">
+        <canvas id="gameCanvas"></canvas>
+        <div class="ui-overlay">
+            <div class="score">Score: <span id="scoreValue">0</span></div>
+            <div class="speed">Speed: <span id="speedValue">0</span> km/h</div>
+            <div class="game-over hidden" id="gameOver">
+                <h2>Game Over!</h2>
+                <p>Final Score: <span id="finalScore">0</span></p>
+                <button id="restartButton">Restart</button>
+            </div>
+        </div>
+    </div>
+    <div class="instructions">
+        <h3>Controls:</h3>
+        <p>↑ - Accelerate</p>
+        <p>↓ - Brake</p>
     </div>
     <script src="game.js"></script>
 </body>
