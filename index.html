@@ -1,36 +1,15 @@
+<!-- index.html -->
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Endless DOSTH Road Survival</title>
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
-    <div class="game-container">
-        <canvas id="gameCanvas"></canvas>
-        <div class="hud">
-            <div id="score">Score: 0</div>
-            <div id="speed">Speed: 0 km/h</div>
-            <div id="speedLimit">Speed Limit: 70 km/h</div>
-            <div id="message"></div>
-        </div>
-        <div id="gameMenu">
-            <h1>Endless DOSTH Road Survival</h1>
-            <button id="startButton">Start Game</button>
-            <div class="instructions">
-                <h2>Controls:</h2>
-                <p>↑ - Accelerate</p>
-                <p>↓ - Decelerate/Brake</p>
-                <p>← → - Switch Lanes</p>
-                <p>SPACE - Pause/Resume</p>
-            </div>
-        </div>
-        <div id="gameOver" class="hidden">
-            <h1>Game Over</h1>
-            <p id="finalScore">Score: 0</p>
-            <button id="restartButton">Play Again</button>
-        </div>
+    <canvas id="gameCanvas"></canvas>
+    <div id="hud">
+        <div>Score: <span id="score">0</span></div>
+        <div>Speed: <span id="speed">0</span> km/h</div>
     </div>
     <script src="game.js"></script>
 </body>
