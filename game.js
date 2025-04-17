@@ -1,80 +1,68 @@
-const canvas = document.getElementById('gameCanvas');
-const ctx = canvas.getContext('2d');
-let speed = 50; // Initial speed (km/h)
-let alertText = "";
+// game.js  
+const canvas = document.getElementById('gameCanvas');  
+const ctx = canvas.getContext('2d');  
+let score = 0;  
+let gameSpeed = 3; // Increases over time  
 
-// Player vehicle
-const player = {
-    x: 100,
-    y: 300,
-    width: 40,
-    height: 20
-};
+class PlayerCar {  
+  constructor() {  
+    this.x = 100;  
+    this.y = 300;  
+    this.speed = 50; // Default: 50 km/h  
+    this.image = loadImage('assets/car.png');  
+  }  
+  update() {  
+    // Auto-scroll road (illusion of movement)  
+    this.x += this.speed / 10;  
+  }  
+}  
 
-// Scenario triggers
-const scenarios = {
-    speedZone: { x: 300, active: false, limit: 30 },
-    following: { frontCar: { x: 500, y: 300 }, safeDistance: 75 },
-    junction: { x: 700, priority: false }
-};
+class Obstacle {  
+  constructor(type) {  
+    this.type = type; // 'speed_zone', 'vehicle', 'junction'  
+    this.width = 50;  
+    this.x = canvas.width;  
+    this.y = 300;  
+  }  
+  draw() {  
+    // Render hazard based on type (e.g., red zone, car sprite, stop sign)  
+  }  
+}  
 
-// Game loop
-function update() {
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
+// Core DOSTH Logic  
+function enforceSpeedLimit() {  
+  if (player.speed > currentZoneLimit) {  
+    endGame(); // Crash for overspeeding  
+  }  
+}  
 
-    // Scenario 1: Speed Zone Compliance
-    if (player.x > scenarios.speedZone.x && !scenarios.speedZone.active) {
-        scenarios.speedZone.active = true;
-        speed = Math.min(speed, scenarios.speedZone.limit); // Enforce limit
-        alertText = "Speed Zone: Decelerating to 30 km/h!";
-    }
+function maintainSafeDistance() {  
+  obstacles.forEach(obs => {  
+    if (obs.type === 'vehicle' && distance(player, obs) < 50) {  
+      score -= 10; // Penalty for tailgating  
+    }  
+  });  
+}  
 
-    // Scenario 2: Inter-Vehicle Following
-    const distance = scenarios.following.frontCar.x - player.x;
-    if (distance < scenarios.following.safeDistance) {
-        speed = Math.max(speed - 1, 0); // Slow down
-        alertText = "Too Close! Maintaining Safe Distance.";
-    }
+function handleJunction() {  
+  if (activeJunction && player.speed > 0) {  
+    endGame(); // Crash for ignoring stop  
+  }  
+}  
 
-    // Scenario 3: Junction Arbitration
-    if (player.x > scenarios.junction.x && !scenarios.junction.priority) {
-        speed = 0; // Full stop
-        alertText = "Junction: Waiting for Priority...";
-    }
+// Game Loop  
+function update() {  
+  player.update();  
+  spawnObstacles();  
+  enforceSpeedLimit();  
+  maintainSafeDistance();  
+  handleJunction();  
+  score++;  
+  requestAnimationFrame(update);  
+}  
 
-    // Render
-    drawPlayer();
-    drawScenarios();
-    updateHUD();
-    requestAnimationFrame(update);
-}
-
-function drawPlayer() {
-    ctx.fillStyle = "#3498db";
-    ctx.fillRect(player.x, player.y, player.width, player.height);
-}
-
-function drawScenarios() {
-    // Speed Zone
-    ctx.fillStyle = "rgba(241, 196, 15, 0.3)";
-    ctx.fillRect(scenarios.speedZone.x, 0, 100, canvas.height);
-
-    // Junction
-    ctx.fillStyle = "rgba(231, 76, 60, 0.3)";
-    ctx.fillRect(scenarios.junction.x, 0, 50, canvas.height);
-}
-
-function updateHUD() {
-    document.getElementById('speed').textContent = speed;
-    document.getElementById('alert').textContent = alertText;
-}
-
-// Controls
-document.addEventListener('keydown', (e) => {
-    if (e.key === 'ArrowRight' && speed < 100) speed += 2;
-    if (e.key === 'ArrowLeft' && speed > 0) speed -= 2;
-    player.x += speed / 5; // Simulate movement
-});
-
-// Start game
-update();
+// Event Listeners  
+document.addEventListener('keydown', (e) => {  
+  if (e.key === 'ArrowUp') player.speed = Math.min(player.speed + 10, 100);  
+  if (e.key === 'ArrowDown') player.speed = Math.max(player.speed - 10, 0);  
+});  
