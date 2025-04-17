@@ -1,288 +1,480 @@
-// game.js
-class Game {
-    constructor() {
-        this.canvas = document.getElementById('gameCanvas');
-        this.ctx = this.canvas.getContext('2d');
-        this.scoreElement = document.getElementById('scoreValue');
-        this.speedElement = document.getElementById('speedValue');
-        this.gameOverElement = document.getElementById('gameOver');
-        this.finalScoreElement = document.getElementById('finalScore');
-        this.restartButton = document.getElementById('restartButton');
-        
-        // Set canvas dimensions
-        this.canvas.width = 800;
-        this.canvas.height = 400;
-        
-        // Game state
-        this.isGameOver = false;
-        this.score = 0;
-        this.frameCount = 0;
-        
-        // Player car
-        this.car = {
-            x: 100,
-            y: this.canvas.height / 2,
-            width: 32,
-            height: 16,
-            speed: 0,
-            maxSpeed: 120,
-            acceleration: 10,
-            deceleration: 20
-        };
-        
-        // Road properties
-        this.road = {
-            y: 200,
-            width: this.canvas.width,
-            laneWidth: 50,
-            stripeWidth: 30,
-            stripeGap: 50,
-            stripes: []
-        };
-        
-        // Initialize road stripes
-        for (let x = 0; x < this.canvas.width; x += this.road.stripeWidth + this.road.stripeGap) {
-            this.road.stripes.push({ x });
-        }
-        
-        // Game obstacles
-        this.obstacles = [];
-        this.lastObstacleTime = 0;
-        this.obstacleInterval = 2000; // ms
-        
-        // Bind methods
-        this.handleKeyDown = this.handleKeyDown.bind(this);
-        this.handleKeyUp = this.handleKeyUp.bind(this);
-        this.restart = this.restart.bind(this);
-        
-        // Input handling
-        this.keys = {};
-        window.addEventListener('keydown', this.handleKeyDown);
-        window.addEventListener('keyup', this.handleKeyUp);
-        this.restartButton.addEventListener('click', this.restart);
-        
-        // Start game loop
-        this.lastTime = 0;
-        requestAnimationFrame(this.gameLoop.bind(this));
+// Game constants
+const GAME_WIDTH = 600;
+const GAME_HEIGHT = 700;
+const LANE_WIDTH = 100;
+const ROAD_SPEED = 5;
+const NUM_LANES = 4;
+const CAR_WIDTH = 40;
+const CAR_HEIGHT = 80;
+
+// Game variables
+let canvas, ctx;
+let score = 0;
+let animationId;
+let gameRunning = false;
+let gamePaused = false;
+
+// Player variables
+let player = {
+    x: GAME_WIDTH / 2 - CAR_WIDTH / 2,
+    y: GAME_HEIGHT - 150,
+    lane: 2, // 0-indexed, middle lane
+    width: CAR_WIDTH,
+    height: CAR_HEIGHT,
+    speed: 0,
+    maxSpeed: 100,
+    acceleration: 0.5,
+    deceleration: 1,
+    color: '#000000'
+};
+
+// Game objects
+let trafficCars = [];
+let speedZones = [];
+let junctions = [];
+let roadSegments = [];
+
+// Initialize game
+function init() {
+    canvas = document.getElementById('gameCanvas');
+    ctx = canvas.getContext('2d');
+    
+    canvas.width = GAME_WIDTH;
+    canvas.height = GAME_HEIGHT;
+    
+    // Event listeners
+    document.addEventListener('keydown', handleKeyDown);
+    document.addEventListener('keyup', handleKeyUp);
+    document.getElementById('restartBtn').addEventListener('click', restartGame);
+    document.getElementById('resumeBtn').addEventListener('click', togglePause);
+    
+    // Initialize road
+    initRoad();
+    
+    // Start game
+    resetGame();
+    gameLoop();
+    gameRunning = true;
+}
+
+// Road initialization
+function initRoad() {
+    // Create initial road segments
+    for (let i = 0; i < 10; i++) {
+        createRoadSegment(-i * 200);
+    }
+}
+
+// Create road segment (stretch of road with potential hazards)
+function createRoadSegment(yPos) {
+    const segment = {
+        y: yPos,
+        height: 200,
+        speedZone: Math.random() < 0.3 ? createSpeedZone(yPos) : null,
+        hasJunction: Math.random() < 0.2
+    };
+    
+    if (segment.hasJunction) {
+        segment.junction = createJunction(yPos + 100);
     }
     
-    handleKeyDown(e) {
-        this.keys[e.key] = true;
+    // Add traffic cars with some probability
+    if (Math.random() < 0.4) {
+        createTrafficCar(yPos + Math.random() * 150, Math.floor(Math.random() * NUM_LANES));
     }
     
-    handleKeyUp(e) {
-        this.keys[e.key] = false;
+    roadSegments.push(segment);
+}
+
+function createSpeedZone(yPos) {
+    return {
+        y: yPos,
+        height: 200,
+        speedLimit: 30 + Math.floor(Math.random() * 70), // 30-100 km/h
+        color: getSpeedZoneColor(this.speedLimit)
+    };
+}
+
+function getSpeedZoneColor(speedLimit) {
+    if (speedLimit <= 30) return '#ff0000'; // Red for slow
+    if (speedLimit <= 60) return '#ffff00'; // Yellow for medium
+    return '#00ff00'; // Green for fast
+}
+
+function createJunction(yPos) {
+    return {
+        y: yPos,
+        width: GAME_WIDTH,
+        height: 100,
+        priorityLanes: [Math.floor(Math.random() * NUM_LANES)], // Lane with priority
+        waitTime: 3000, // ms before non-priority lanes can go
+        active: true
+    };
+}
+
+function createTrafficCar(yPos, lane) {
+    const car = {
+        x: lane * LANE_WIDTH + (LANE_WIDTH - CAR_WIDTH) / 2,
+        y: yPos,
+        lane: lane,
+        width: CAR_WIDTH,
+        height: CAR_HEIGHT,
+        speed: 2 + Math.random() * 3, // Random speed between 2-5
+        color: getRandomCarColor()
+    };
+    trafficCars.push(car);
+}
+
+function getRandomCarColor() {
+    const colors = ['#ff0000', '#0000ff', '#ffff00', '#00ffff', '#ff00ff', '#ffffff'];
+    return colors[Math.floor(Math.random() * colors.length)];
+}
+
+// Game loop
+function gameLoop() {
+    if (!gamePaused) {
+        update();
+    }
+    render();
+    animationId = requestAnimationFrame(gameLoop);
+}
+
+// Update game state
+function update() {
+    if (!gameRunning) return;
+    
+    // Update player
+    updatePlayer();
+    
+    // Update road segments
+    updateRoad();
+    
+    // Update traffic cars
+    updateTrafficCars();
+    
+    // Check collisions
+    checkCollisions();
+    
+    // Update score
+    score += 0.1; // Approximately 1 point per second at 60fps
+    document.getElementById('scoreValue').textContent = Math.floor(score);
+    document.getElementById('speedValue').textContent = Math.floor(player.speed);
+}
+
+function updatePlayer() {
+    // Apply speed limits from speed zones
+    const currentSpeedZone = getCurrentSpeedZone();
+    if (currentSpeedZone) {
+        player.maxSpeed = currentSpeedZone.speedLimit;
+    } else {
+        player.maxSpeed = 100;
     }
     
-    restart() {
-        // Reset game state
-        this.isGameOver = false;
-        this.score = 0;
-        this.car.speed = 0;
-        this.car.y = this.canvas.height / 2;
-        this.obstacles = [];
-        this.lastObstacleTime = 0;
-        this.gameOverElement.classList.add('hidden');
-        
-        // Restart game loop
-        this.lastTime = 0;
-        requestAnimationFrame(this.gameLoop.bind(this));
+    // Check if at junction and needs to stop
+    const currentJunction = getCurrentJunction();
+    if (currentJunction && !hasJunctionPriority(currentJunction)) {
+        player.maxSpeed = 0;
     }
     
-    generateObstacle() {
-        const types = ['speedZone', 'vehicle', 'junction'];
-        const type = types[Math.floor(Math.random() * types.length)];
-        
-        let obstacle = {
-            x: this.canvas.width,
-            y: this.road.y - 20,
-            width: 60,
-            height: 40,
-            type
-        };
-        
-        switch (type) {
-            case 'speedZone':
-                obstacle.limit = 30 + Math.floor(Math.random() * 70); // 30-100 km/h
-                obstacle.color = '#f00';
-                obstacle.width = 100 + Math.floor(Math.random() * 200); // Variable length
-                break;
-            case 'vehicle':
-                obstacle.speed = 20 + Math.floor(Math.random() * 40); // 20-60 km/h
-                obstacle.color = '#ff0';
-                obstacle.width = 40;
-                break;
-            case 'junction':
-                obstacle.priority = Math.random() > 0.5; // Random priority
-                obstacle.color = obstacle.priority ? '#0f0' : '#f00';
-                obstacle.width = 30;
-                break;
-        }
-        
-        this.obstacles.push(obstacle);
+    // Clamp speed
+    if (player.speed > player.maxSpeed) {
+        player.speed = Math.max(player.speed - player.deceleration * 2, player.maxSpeed);
     }
     
-    update(deltaTime) {
-        if (this.isGameOver) return;
+    // Update player lane position
+    const targetX = player.lane * LANE_WIDTH + (LANE_WIDTH - CAR_WIDTH) / 2;
+    if (player.x < targetX) {
+        player.x += 5;
+        if (player.x > targetX) player.x = targetX;
+    } else if (player.x > targetX) {
+        player.x -= 5;
+        if (player.x < targetX) player.x = targetX;
+    }
+}
+
+function getCurrentSpeedZone() {
+    for (const segment of roadSegments) {
+        if (segment.speedZone && 
+            player.y < segment.y + segment.height && 
+            player.y + player.height > segment.y) {
+            return segment.speedZone;
+        }
+    }
+    return null;
+}
+
+function getCurrentJunction() {
+    for (const segment of roadSegments) {
+        if (segment.hasJunction && 
+            player.y < segment.junction.y + segment.junction.height && 
+            player.y + player.height > segment.junction.y) {
+            return segment.junction;
+        }
+    }
+    return null;
+}
+
+function hasJunctionPriority(junction) {
+    return junction.priorityLanes.includes(player.lane);
+}
+
+function updateRoad() {
+    // Move road segments down
+    for (let i = roadSegments.length - 1; i >= 0; i--) {
+        roadSegments[i].y += ROAD_SPEED + player.speed / 20;
         
-        // Update score (1 point per second)
-        this.frameCount++;
-        if (this.frameCount % 60 === 0) {
-            this.score++;
-            this.scoreElement.textContent = this.score;
+        // Update junction position if exists
+        if (roadSegments[i].hasJunction) {
+            roadSegments[i].junction.y = roadSegments[i].y + 100;
         }
         
-        // Handle player input
-        if (this.keys['ArrowUp']) {
-            this.car.speed = Math.min(this.car.speed + this.car.acceleration * deltaTime, this.car.maxSpeed);
-        } else if (this.keys['ArrowDown']) {
-            this.car.speed = Math.max(this.car.speed - this.car.deceleration * deltaTime, 0);
-        } else {
-            // Gradual deceleration
-            this.car.speed = Math.max(this.car.speed - (this.car.deceleration / 2) * deltaTime, 0);
-        }
-        
-        // Check for speed zones
-        for (const obstacle of this.obstacles) {
-            if (obstacle.type === 'speedZone' && 
-                this.car.x + this.car.width > obstacle.x && 
-                this.car.x < obstacle.x + obstacle.width) {
-                if (this.car.speed > obstacle.limit) {
-                    this.car.speed = obstacle.limit;
-                }
-            }
-        }
-        
-        // Update speed display
-        this.speedElement.textContent = Math.floor(this.car.speed);
-        
-        // Update road stripes
-        const scrollSpeed = this.car.speed / 20;
-        for (const stripe of this.road.stripes) {
-            stripe.x -= scrollSpeed;
-            if (stripe.x + this.road.stripeWidth < 0) {
-                stripe.x = this.canvas.width;
-            }
-        }
-        
-        // Generate obstacles
-        const currentTime = Date.now();
-        if (currentTime - this.lastObstacleTime > this.obstacleInterval) {
-            this.generateObstacle();
-            this.lastObstacleTime = currentTime;
+        // Remove segments that are off-screen
+        if (roadSegments[i].y > GAME_HEIGHT) {
+            roadSegments.splice(i, 1);
             
-            // Reduce interval as score increases (increased difficulty)
-            this.obstacleInterval = Math.max(500, 2000 - this.score * 10);
-        }
-        
-        // Update obstacles
-        for (let i = this.obstacles.length - 1; i >= 0; i--) {
-            const obstacle = this.obstacles[i];
-            
-            // Move obstacle
-            obstacle.x -= scrollSpeed;
-            
-            // Remove obstacles that are off-screen
-            if (obstacle.x + obstacle.width < 0) {
-                this.obstacles.splice(i, 1);
-                continue;
-            }
-            
-            // Check collision with player
-            if (this.car.x + this.car.width > obstacle.x && 
-                this.car.x < obstacle.x + obstacle.width && 
-                this.car.y + this.car.height > obstacle.y && 
-                this.car.y < obstacle.y + obstacle.height) {
-                
-                let collision = false;
-                
-                switch (obstacle.type) {
-                    case 'vehicle':
-                        collision = true;
-                        break;
-                    case 'junction':
-                        if (!obstacle.priority && this.car.speed > 5) {
-                            collision = true;
-                        }
-                        break;
-                }
-                
-                if (collision) {
-                    this.gameOver();
-                }
-            }
-        }
-    }
-    
-    gameOver() {
-        this.isGameOver = true;
-        this.finalScoreElement.textContent = this.score;
-        this.gameOverElement.classList.remove('hidden');
-    }
-    
-    draw() {
-        // Clear canvas
-        this.ctx.fillStyle = '#000';
-        this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
-        
-        // Draw road
-        this.ctx.fillStyle = '#333';
-        this.ctx.fillRect(0, this.road.y, this.canvas.width, 50);
-        
-        // Draw road stripes
-        this.ctx.fillStyle = '#0f0';
-        for (const stripe of this.road.stripes) {
-            this.ctx.fillRect(stripe.x, this.road.y + 20, this.road.stripeWidth, 5);
-        }
-        
-        // Draw obstacles
-        for (const obstacle of this.obstacles) {
-            this.ctx.fillStyle = obstacle.color;
-            this.ctx.fillRect(obstacle.x, obstacle.y, obstacle.width, obstacle.height);
-            
-            // Draw obstacle label
-            this.ctx.fillStyle = '#fff';
-            this.ctx.font = '10px Arial';
-            let label = '';
-            
-            switch (obstacle.type) {
-                case 'speedZone':
-                    label = `${obstacle.limit} km/h`;
-                    break;
-                case 'vehicle':
-                    label = 'CAR';
-                    break;
-                case 'junction':
-                    label = obstacle.priority ? 'PRIORITY' : 'STOP';
-                    break;
-            }
-            
-            this.ctx.fillText(label, obstacle.x + obstacle.width / 2 - 15, obstacle.y + obstacle.height / 2);
-        }
-        
-        // Draw player car
-        this.ctx.fillStyle = '#fff';
-        this.ctx.fillRect(this.car.x, this.car.y, this.car.width, this.car.height);
-    }
-    
-    gameLoop(timestamp) {
-        // Calculate delta time
-        if (!this.lastTime) this.lastTime = timestamp;
-        const deltaTime = (timestamp - this.lastTime) / 1000;
-        this.lastTime = timestamp;
-        
-        // Update and draw game
-        this.update(deltaTime);
-        this.draw();
-        
-        // Continue game loop
-        if (!this.isGameOver) {
-            requestAnimationFrame(this.gameLoop.bind(this));
+            // Create new segment at the top
+            createRoadSegment(-200);
         }
     }
 }
 
-// Initialize game when page loads
-window.addEventListener('load', () => {
-    new Game();
-});
+function updateTrafficCars() {
+    // Move traffic cars
+    for (let i = trafficCars.length - 1; i >= 0; i--) {
+        const car = trafficCars[i];
+        
+        // Move car down at difference between player and car speed
+        car.y += ROAD_SPEED + player.speed / 20 - car.speed;
+        
+        // Remove cars that are off-screen
+        if (car.y > GAME_HEIGHT) {
+            trafficCars.splice(i, 1);
+        }
+    }
+}
+
+function checkCollisions() {
+    // Check collision with traffic cars
+    for (const car of trafficCars) {
+        if (isColliding(player, car)) {
+            // Game over on collision
+            gameOver();
+            return;
+        }
+        
+        // Check if player is following too closely
+        if (player.lane === car.lane && 
+            car.y > player.y && 
+            car.y - (player.y + player.height) < 5) {
+            // Slow down player
+            player.speed = Math.max(0, player.speed - player.deceleration * 2);
+        }
+    }
+}
+
+function isColliding(objA, objB) {
+    return objA.x < objB.x + objB.width &&
+           objA.x + objA.width > objB.x &&
+           objA.y < objB.y + objB.height &&
+           objA.y + objA.height > objB.y;
+}
+
+// Render game
+function render() {
+    // Clear canvas
+    ctx.clearRect(0, 0, GAME_WIDTH, GAME_HEIGHT);
+    
+    // Draw road background
+    drawRoad();
+    
+    // Draw road segments (speed zones, junctions)
+    drawRoadSegments();
+    
+    // Draw traffic cars
+    drawTrafficCars();
+    
+    // Draw player car
+    drawCar(player);
+}
+
+function drawRoad() {
+    // Draw road background
+    ctx.fillStyle = '#333333';
+    ctx.fillRect(0, 0, GAME_WIDTH, GAME_HEIGHT);
+    
+    // Draw lane markings
+    ctx.strokeStyle = '#ffffff';
+    ctx.setLineDash([20, 20]); // Dashed line
+    
+    for (let i = 1; i < NUM_LANES; i++) {
+        ctx.beginPath();
+        ctx.moveTo(i * LANE_WIDTH, 0);
+        ctx.lineTo(i * LANE_WIDTH, GAME_HEIGHT);
+        ctx.stroke();
+    }
+    
+    // Reset line dash
+    ctx.setLineDash([]);
+}
+
+function drawRoadSegments() {
+    // Draw speed zones
+    for (const segment of roadSegments) {
+        if (segment.speedZone) {
+            // Draw speed zone background
+            ctx.fillStyle = getSpeedZoneColor(segment.speedZone.speedLimit);
+            ctx.globalAlpha = 0.2;
+            ctx.fillRect(0, segment.y, GAME_WIDTH, segment.height);
+            ctx.globalAlpha = 1.0;
+            
+            // Draw speed limit text
+            ctx.fillStyle = '#ffffff';
+            ctx.font = '24px Arial';
+            ctx.textAlign = 'center';
+            ctx.fillText(`${segment.speedZone.speedLimit} km/h`, GAME_WIDTH / 2, segment.y + 40);
+        }
+        
+        // Draw junctions
+        if (segment.hasJunction) {
+            const junction = segment.junction;
+            
+            // Draw junction background
+            ctx.fillStyle = '#555555';
+            ctx.fillRect(0, junction.y, GAME_WIDTH, junction.height);
+            
+            // Draw junction crossing lines
+            ctx.strokeStyle = '#ffffff';
+            ctx.lineWidth = 4;
+            
+            // Horizontal lines
+            for (let i = 0; i < 4; i++) {
+                ctx.beginPath();
+                ctx.moveTo(0, junction.y + i * (junction.height / 3));
+                ctx.lineTo(GAME_WIDTH, junction.y + i * (junction.height / 3));
+                ctx.stroke();
+            }
+            
+            // Priority lane indicators
+            for (const lane of junction.priorityLanes) {
+                ctx.fillStyle = '#00ff00';
+                ctx.fillRect(
+                    lane * LANE_WIDTH, 
+                    junction.y, 
+                    LANE_WIDTH, 
+                    10
+                );
+            }
+        }
+    }
+}
+
+function drawTrafficCars() {
+    for (const car of trafficCars) {
+        drawCar(car);
+    }
+}
+
+function drawCar(car) {
+    // Draw car body
+    ctx.fillStyle = car.color;
+    ctx.fillRect(car.x, car.y, car.width, car.height);
+    
+    // Draw car details (windows, etc.)
+    ctx.fillStyle = '#87CEEB'; // Windshield color
+    ctx.fillRect(car.x + 5, car.y + 10, car.width - 10, 15);
+    ctx.fillRect(car.x + 5, car.y + car.height - 25, car.width - 10, 15);
+    
+    // Draw headlights/taillights
+    if (car === player) {
+        // Taillights (red)
+        ctx.fillStyle = '#ff0000';
+        ctx.fillRect(car.x + 5, car.y + car.height - 5, 8, 5);
+        ctx.fillRect(car.x + car.width - 13, car.y + car.height - 5, 8, 5);
+        
+        // Headlights (white)
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(car.x + 5, car.y, 8, 5);
+        ctx.fillRect(car.x + car.width - 13, car.y, 8, 5);
+    } else {
+        // Headlights for traffic cars (always visible as white)
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(car.x + 5, car.y, 8, 5);
+        ctx.fillRect(car.x + car.width - 13, car.y, 8, 5);
+    }
+}
+
+// Input handling
+function handleKeyDown(e) {
+    if (!gameRunning || gamePaused) {
+        if (e.code === 'Space') {
+            togglePause();
+        }
+        return;
+    }
+    
+    switch(e.code) {
+        case 'ArrowUp':
+            player.speed = Math.min(player.maxSpeed, player.speed + player.acceleration);
+            break;
+        case 'ArrowDown':
+            player.speed = Math.max(0, player.speed - player.deceleration);
+            break;
+        case 'ArrowLeft':
+            if (player.lane > 0) {
+                player.lane--;
+            }
+            break;
+        case 'ArrowRight':
+            if (player.lane < NUM_LANES - 1) {
+                player.lane++;
+            }
+            break;
+        case 'Space':
+            togglePause();
+            break;
+    }
+}
+
+function handleKeyUp(e) {
+    // Optional: Add key up handling if needed
+}
+
+// Game state management
+function resetGame() {
+    score = 0;
+    player.speed = 0;
+    player.lane = 2;
+    player.x = player.lane * LANE_WIDTH + (LANE_WIDTH - CAR_WIDTH) / 2;
+    
+    // Clear all arrays
+    trafficCars = [];
+    roadSegments = [];
+    
+    // Initialize road
+    initRoad();
+    
+    // Hide overlays
+    document.getElementById('gameOver').style.display = 'none';
+    document.getElementById('pauseMenu').style.display = 'none';
+    
+    gameRunning = true;
+    gamePaused = false;
+}
+
+function gameOver() {
+    gameRunning = false;
+    document.getElementById('finalScore').textContent = Math.floor(score);
+    document.getElementById('gameOver').style.display = 'block';
+}
+
+function togglePause() {
+    gamePaused = !gamePaused;
+    document.getElementById('pauseMenu').style.display = gamePaused ? 'block' : 'none';
+}
+
+function restartGame() {
+    resetGame();
+}
+
+// Start the game when the window loads
+window.onload = init;
