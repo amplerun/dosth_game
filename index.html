@@ -1,17 +1,722 @@
-// File: index.html
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>DOSTH Road Survival</title>
-    <link rel="stylesheet" href="styles.css">
-    <script src="https://unpkg.com/react@17/umd/react.production.min.js"></script>
-    <script src="https://unpkg.com/react-dom@17/umd/react-dom.production.min.js"></script>
-    <script src="https://unpkg.com/babel-standalone@6/babel.min.js"></script>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: #111;
+            color: #fff;
+            font-family: 'Orbitron', sans-serif;
+            overflow: hidden;
+        }
+        
+        #game-container {
+            position: relative;
+            width: 100vw;
+            height: 100vh;
+            background-color: #080808;
+        }
+        
+        #game-canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+        }
+        
+        #hud {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            padding: 15px;
+            background-color: rgba(0, 0, 0, 0.7);
+            border: 2px solid #0ff;
+            border-radius: 10px;
+            box-shadow: 0 0 10px #0ff;
+            z-index: 10;
+        }
+        
+        #score {
+            font-size: 24px;
+            color: #0ff;
+            margin-bottom: 10px;
+        }
+        
+        #speed {
+            font-size: 20px;
+            color: #0f0;
+        }
+        
+        #zone-info {
+            font-size: 18px;
+            margin-top: 10px;
+        }
+        
+        #messages {
+            position: absolute;
+            bottom: 30px;
+            left: 50%;
+            transform: translateX(-50%);
+            padding: 10px 20px;
+            background-color: rgba(0, 0, 0, 0.7);
+            border: 1px solid #0ff;
+            border-radius: 10px;
+            text-align: center;
+            z-index: 10;
+        }
+        
+        #pause-screen {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.8);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 20;
+            display: none;
+        }
+        
+        #pause-screen h2 {
+            color: #0ff;
+            font-size: 40px;
+            margin-bottom: 20px;
+        }
+        
+        #pause-screen p {
+            color: #fff;
+            font-size: 20px;
+            max-width: 600px;
+            text-align: center;
+            line-height: 1.5;
+        }
+        
+        #instructions {
+            position: absolute;
+            bottom: 10px;
+            right: 10px;
+            color: #0ff;
+            font-size: 14px;
+            text-align: right;
+            padding: 10px;
+            background-color: rgba(0, 0, 0, 0.7);
+            border-radius: 5px;
+        }
+
+        @font-face {
+            font-family: 'Orbitron';
+            src: url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&display=swap');
+        }
+    </style>
 </head>
 <body>
-    <div id="root"></div>
-    <script type="text/babel" src="app.js"></script>
+    <div id="game-container">
+        <canvas id="game-canvas"></canvas>
+        
+        <div id="hud">
+            <div id="score">Score: 0</div>
+            <div id="speed">Speed: 0 km/h</div>
+            <div id="zone-info">Zone: Green (70 km/h)</div>
+        </div>
+        
+        <div id="messages">
+            Welcome to DOSTH Road Survival - Experience safe, smart driving automation
+        </div>
+        
+        <div id="instructions">
+            ← → : Change Lanes | ↑ ↓ : Acceleration Intent | SPACE : Pause
+        </div>
+        
+        <div id="pause-screen">
+            <h2>SIMULATION PAUSED</h2>
+            <p>DOSTH Road Survival demonstrates how automated systems can enhance road safety through speed control, distance management, and smart junction coordination.</p>
+            <p>Press SPACE to resume</p>
+        </div>
+    </div>
+
+    <script>
+        // Game constants
+        const CANVAS_WIDTH = window.innerWidth;
+        const CANVAS_HEIGHT = window.innerHeight;
+        const ROAD_WIDTH = CANVAS_WIDTH * 0.6;
+        const LANE_COUNT = 4;
+        const LANE_WIDTH = ROAD_WIDTH / LANE_COUNT;
+        const ROAD_LEFT = (CANVAS_WIDTH - ROAD_WIDTH) / 2;
+        const PLAYER_WIDTH = LANE_WIDTH * 0.8;
+        const PLAYER_HEIGHT = PLAYER_WIDTH * 2;
+        const NPC_WIDTH = PLAYER_WIDTH * 0.9;
+        const NPC_HEIGHT = NPC_WIDTH * 2;
+        const HORIZON = CANVAS_HEIGHT * 0.2;
+        const SEGMENT_HEIGHT = 15;
+        const RUMBLE_LENGTH = 3;
+        const ROAD_LENGTH = 2000;
+        
+        // Game state
+        let paused = false;
+        let playerLane = 1; // 0-based index (0, 1, 2, 3)
+        let playerZ = 0;
+        let cameraHeight = 1000;
+        let playerSpeed = 0;
+        let targetSpeed = 70; // Default green zone speed
+        let score = 0;
+        let lastScoreUpdate = 0;
+        let segments = [];
+        let npcCars = [];
+        let currentZone = 'green';
+        let speedLimits = {
+            'red': 30,
+            'yellow': 50,
+            'green': 70
+        };
+        let zoneColors = {
+            'red': '#ff3333',
+            'yellow': '#ffcc00',
+            'green': '#33cc33'
+        };
+        let zoneMessages = {
+            'red': 'Entering Red Zone: DOSTH limiting speed to 30 km/h',
+            'yellow': 'Entering Yellow Zone: DOSTH adjusting to 50 km/h',
+            'green': 'Entering Green Zone: Safe to travel at 70 km/h'
+        };
+        let currentMessage = '';
+        let messageTimeout = null;
+        let junctionAhead = false;
+        let junctionTimer = 0;
+        let canPass = true;
+        
+        // Initialize canvas
+        const canvas = document.getElementById('game-canvas');
+        const ctx = canvas.getContext('2d');
+        canvas.width = CANVAS_WIDTH;
+        canvas.height = CANVAS_HEIGHT;
+        
+        // DOM elements
+        const scoreElement = document.getElementById('score');
+        const speedElement = document.getElementById('speed');
+        const zoneInfoElement = document.getElementById('zone-info');
+        const messagesElement = document.getElementById('messages');
+        const pauseScreen = document.getElementById('pause-screen');
+        
+        // Initialize road segments
+        function initRoad() {
+            segments = [];
+            
+            for (let i = 0; i < ROAD_LENGTH; i++) {
+                let segment = {
+                    index: i,
+                    z: i * SEGMENT_HEIGHT,
+                    curve: 0,
+                    y: 0
+                };
+                
+                // Create different zones
+                if (i > 0 && i % 200 === 0) {
+                    // Change zone every 200 segments
+                    let newZone;
+                    do {
+                        // Pick a random zone that's different from the current one
+                        const zones = ['red', 'yellow', 'green'];
+                        newZone = zones[Math.floor(Math.random() * zones.length)];
+                    } while (
+                        segments.length > 0 && 
+                        segments[segments.length - 1].zone === newZone
+                    );
+                    
+                    segment.zone = newZone;
+                    
+                    // Add some curves in red zones
+                    if (newZone === 'red') {
+                        const curveDirection = Math.random() > 0.5 ? 1 : -1;
+                        for (let j = 0; j < 50; j++) {
+                            if (i + j < ROAD_LENGTH) {
+                                segments.push({
+                                    index: i + j,
+                                    z: (i + j) * SEGMENT_HEIGHT,
+                                    curve: curveDirection * 3,
+                                    y: Math.sin(j / 5) * 500,
+                                    zone: newZone
+                                });
+                            }
+                        }
+                        i += 49; // Skip the segments we just added
+                        continue;
+                    }
+                    
+                    // Add junction in yellow zones (about 50% chance)
+                    if (newZone === 'yellow' && Math.random() > 0.5) {
+                        segment.junction = true;
+                    }
+                } else {
+                    // Keep the zone from the previous segment
+                    segment.zone = segments.length > 0 
+                        ? segments[segments.length - 1].zone 
+                        : 'green'; // Default zone is green
+                }
+                
+                // Add hills in some areas
+                if (i > 300 && i < 400) {
+                    segment.y = Math.sin((i - 300) / 30) * 1500;
+                }
+                
+                segments.push(segment);
+            }
+        }
+        
+        // Generate NPC cars
+        function generateNPCCars() {
+            npcCars = [];
+            
+            // Start with 10 NPC cars
+            for (let i = 0; i < 10; i++) {
+                let lane;
+                do {
+                    lane = Math.floor(Math.random() * LANE_COUNT);
+                } while (i < 3 && lane === playerLane); // Make sure first few NPCs aren't in player lane
+                
+                const z = playerZ + 300 + Math.random() * 2000;
+                const speed = 30 + Math.random() * 50; // Speed between 30-80 km/h
+                const color = getRandomNPCColor();
+                
+                npcCars.push({
+                    lane,
+                    z,
+                    speed,
+                    color
+                });
+            }
+        }
+        
+        function getRandomNPCColor() {
+            const colors = [
+                '#f44336', '#e91e63', '#9c27b0', '#673ab7', 
+                '#3f51b5', '#2196f3', '#00bcd4', '#009688',
+                '#4caf50', '#8bc34a', '#cddc39', '#ffc107'
+            ];
+            return colors[Math.floor(Math.random() * colors.length)];
+        }
+        
+        // Update game state
+        function update(deltaTime) {
+            if (paused) return;
+            
+            // Update score
+            const now = Date.now();
+            if (now - lastScoreUpdate >= 1000) {
+                // Base score increment
+                score += 1;
+                
+                // Bonus for optimal speed
+                const speedLimit = speedLimits[currentZone];
+                if (Math.abs(playerSpeed - speedLimit) < 5) {
+                    score += 5;
+                    showMessage("Maintaining optimal speed: +5 points", 1000);
+                }
+                
+                lastScoreUpdate = now;
+                scoreElement.textContent = `Score: ${score}`;
+            }
+            
+            // Find current segment
+            const playerSegment = findSegment(playerZ);
+            if (playerSegment) {
+                // Update zone
+                if (playerSegment.zone && playerSegment.zone !== currentZone) {
+                    currentZone = playerSegment.zone;
+                    targetSpeed = speedLimits[currentZone];
+                    zoneInfoElement.textContent = `Zone: ${capitalizeFirstLetter(currentZone)} (${targetSpeed} km/h)`;
+                    zoneInfoElement.style.color = zoneColors[currentZone];
+                    showMessage(zoneMessages[currentZone], 3000);
+                }
+                
+                // Handle junctions
+                if (playerSegment.junction && !junctionAhead) {
+                    junctionAhead = true;
+                    junctionTimer = 3 + Math.random() * 2;
+                    canPass = Math.random() > 0.5;
+                    showMessage(canPass ? 
+                        "Junction ahead: DOSTH indicates right of way" : 
+                        "Junction ahead: DOSTH indicates stop", 3000);
+                }
+            }
+            
+            // Update junction logic
+            if (junctionAhead) {
+                junctionTimer -= deltaTime / 1000;
+                if (junctionTimer <= 0) {
+                    if (!canPass) {
+                        // Simulate stopping at junction
+                        targetSpeed = 0;
+                        setTimeout(() => {
+                            canPass = true;
+                            targetSpeed = speedLimits[currentZone];
+                            showMessage("Junction clear, proceeding", 2000);
+                            setTimeout(() => {
+                                junctionAhead = false;
+                            }, 2000);
+                        }, 2000);
+                    } else {
+                        showMessage("Passing through junction safely", 2000);
+                        setTimeout(() => {
+                            junctionAhead = false;
+                        }, 2000);
+                    }
+                }
+            }
+            
+            // Update player speed (smooth acceleration/deceleration)
+            const speedDiff = targetSpeed - playerSpeed;
+            if (Math.abs(speedDiff) > 0.1) {
+                // Accelerate/decelerate at max 10 km/h per second
+                const maxChange = 10 * deltaTime / 1000;
+                playerSpeed += Math.sign(speedDiff) * Math.min(Math.abs(speedDiff), maxChange);
+            } else {
+                playerSpeed = targetSpeed;
+            }
+            
+            // Convert km/h to game units
+            const speedFactor = playerSpeed / 3.6; // km/h to m/s
+            
+            // Update player position
+            playerZ += speedFactor * deltaTime / 10;
+            if (playerZ >= ROAD_LENGTH * SEGMENT_HEIGHT) {
+                playerZ = 0; // Loop back to start
+            }
+            
+            // Update NPC cars
+            for (let i = 0; i < npcCars.length; i++) {
+                const npc = npcCars[i];
+                
+                // Move NPC based on its speed
+                const npcSpeedFactor = npc.speed / 3.6;
+                npc.z -= (speedFactor - npcSpeedFactor) * deltaTime / 10;
+                
+                // Check if NPC is too far behind
+                if (npc.z < playerZ - 100) {
+                    // Reset NPC to a position ahead
+                    npc.z = playerZ + 1000 + Math.random() * 1000;
+                    npc.lane = Math.floor(Math.random() * LANE_COUNT);
+                    npc.speed = 30 + Math.random() * 50;
+                    npc.color = getRandomNPCColor();
+                }
+                
+                // Check if NPC is too close to player and in same lane
+                if (npc.lane === playerLane && Math.abs(npc.z - playerZ) < 50) {
+                    // Auto-adjust speed to maintain safe distance
+                    targetSpeed = Math.min(targetSpeed, npc.speed * 0.9);
+                    showMessage("DOSTH: Maintaining safe distance", 1000);
+                }
+            }
+            
+            // Update UI
+            speedElement.textContent = `Speed: ${Math.round(playerSpeed)} km/h`;
+        }
+        
+        // Find segment at a specific z position
+        function findSegment(z) {
+            if (segments.length === 0) return null;
+            
+            const segmentIndex = Math.floor(z / SEGMENT_HEIGHT) % segments.length;
+            return segments[segmentIndex];
+        }
+        
+        // Render the game
+        function render() {
+            // Clear canvas
+            ctx.clearRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+            
+            // Draw sky
+            const skyGradient = ctx.createLinearGradient(0, 0, 0, HORIZON);
+            skyGradient.addColorStop(0, '#000');
+            skyGradient.addColorStop(1, '#001');
+            ctx.fillStyle = skyGradient;
+            ctx.fillRect(0, 0, CANVAS_WIDTH, HORIZON);
+            
+            // Draw stars
+            ctx.fillStyle = '#fff';
+            for (let i = 0; i < 100; i++) {
+                const x = Math.random() * CANVAS_WIDTH;
+                const y = Math.random() * HORIZON;
+                const size = Math.random() * 2;
+                ctx.fillRect(x, y, size, size);
+            }
+            
+            // Draw ground
+            ctx.fillStyle = '#020';
+            ctx.fillRect(0, HORIZON, CANVAS_WIDTH, CANVAS_HEIGHT - HORIZON);
+            
+            // Calculate which segments are visible
+            const baseSegment = findSegment(playerZ);
+            if (!baseSegment) return;
+            
+            const currentZoneColor = zoneColors[currentZone];
+            
+            // Draw road from farthest to nearest
+            let maxY = CANVAS_HEIGHT;
+            for (let n = 0; n < 100; n++) {
+                const segmentIndex = (baseSegment.index + n) % segments.length;
+                const segment = segments[segmentIndex];
+                
+                // Project 3D points to 2D
+                const scale = cameraHeight / (segment.z + cameraHeight - playerZ);
+                const x1 = Math.round(CANVAS_WIDTH / 2 + scale * (ROAD_LEFT - CANVAS_WIDTH / 2));
+                const y1 = Math.round(HORIZON + scale * (segment.y - cameraHeight));
+                const w1 = Math.round(scale * ROAD_WIDTH);
+                
+                // Only draw if visible
+                if (y1 >= maxY) continue;
+                maxY = y1;
+                
+                // Draw road segment
+                ctx.fillStyle = (segment.index % 2) === 0 ? '#111' : '#222';
+                ctx.fillRect(x1, y1, w1, CANVAS_HEIGHT - y1);
+                
+                // Draw lane markings
+                ctx.strokeStyle = '#fff';
+                ctx.lineWidth = 2;
+                for (let lane = 1; lane < LANE_COUNT; lane++) {
+                    const laneX = x1 + w1 * (lane / LANE_COUNT);
+                    if (segment.index % 3 === 0) { // dashed line
+                        ctx.beginPath();
+                        ctx.moveTo(laneX, y1);
+                        ctx.lineTo(laneX, y1 + 10);
+                        ctx.stroke();
+                    }
+                }
+                
+                // Draw road edges
+                ctx.strokeStyle = '#fff';
+                ctx.lineWidth = 3;
+                ctx.beginPath();
+                ctx.moveTo(x1, y1);
+                ctx.lineTo(x1, CANVAS_HEIGHT);
+                ctx.stroke();
+                
+                ctx.beginPath();
+                ctx.moveTo(x1 + w1, y1);
+                ctx.lineTo(x1 + w1, CANVAS_HEIGHT);
+                ctx.stroke();
+                
+                // Draw zone color
+                if (segment.zone) {
+                    const zoneColor = zoneColors[segment.zone];
+                    ctx.fillStyle = segment.zone === 'red' ? 
+                        `rgba(255, 0, 0, 0.1)` : 
+                        (segment.zone === 'yellow' ? 
+                            `rgba(255, 204, 0, 0.1)` : 
+                            `rgba(0, 255, 0, 0.1)`);
+                    ctx.fillRect(x1, y1, w1, CANVAS_HEIGHT - y1);
+                    
+                    // Draw glowing zone lines
+                    ctx.strokeStyle = zoneColor;
+                    ctx.lineWidth = 5;
+                    ctx.shadowColor = zoneColor;
+                    ctx.shadowBlur = 10;
+                    ctx.beginPath();
+                    ctx.moveTo(x1 - 10, y1);
+                    ctx.lineTo(x1 - 10, CANVAS_HEIGHT);
+                    ctx.stroke();
+                    
+                    ctx.beginPath();
+                    ctx.moveTo(x1 + w1 + 10, y1);
+                    ctx.lineTo(x1 + w1 + 10, CANVAS_HEIGHT);
+                    ctx.stroke();
+                    ctx.shadowBlur = 0;
+                }
+                
+                // Draw junction markers
+                if (segment.junction) {
+                    const junctionWidth = w1 * 0.8;
+                    const junctionX = x1 + (w1 - junctionWidth) / 2;
+                    
+                    ctx.fillStyle = 'rgba(255, 255, 255, 0.3)';
+                    ctx.fillRect(junctionX, y1, junctionWidth, 20);
+                    
+                    ctx.fillStyle = canPass ? 'rgba(0, 255, 0, 0.5)' : 'rgba(255, 0, 0, 0.5)';
+                    ctx.beginPath();
+                    ctx.arc(CANVAS_WIDTH / 2, y1 + 10, 20, 0, Math.PI * 2);
+                    ctx.fill();
+                }
+                
+                // Draw NPC cars
+                for (const npc of npcCars) {
+                    if (Math.abs(segment.z - npc.z) < SEGMENT_HEIGHT / 2) {
+                        const npcX = x1 + w1 * ((npc.lane + 0.5) / LANE_COUNT) - (NPC_WIDTH * scale / 2);
+                        const npcY = y1 - (NPC_HEIGHT * scale);
+                        const npcW = NPC_WIDTH * scale;
+                        const npcH = NPC_HEIGHT * scale;
+                        
+                        // Draw NPC car body
+                        ctx.fillStyle = npc.color;
+                        ctx.fillRect(npcX, npcY, npcW, npcH);
+                        
+                        // Draw glow effect
+                        ctx.shadowColor = npc.color;
+                        ctx.shadowBlur = 10;
+                        ctx.strokeStyle = '#fff';
+                        ctx.lineWidth = 2;
+                        ctx.strokeRect(npcX, npcY, npcW, npcH);
+                        ctx.shadowBlur = 0;
+                        
+                        // Draw windows
+                        ctx.fillStyle = '#000';
+                        ctx.fillRect(npcX + npcW * 0.1, npcY + npcH * 0.1, npcW * 0.8, npcH * 0.2);
+                        ctx.fillRect(npcX + npcW * 0.1, npcY + npcH * 0.6, npcW * 0.8, npcH * 0.2);
+                        
+                        // Draw lights
+                        ctx.fillStyle = '#ff0';
+                        ctx.fillRect(npcX + npcW * 0.1, npcY + npcH * 0.9, npcW * 0.2, npcH * 0.1);
+                        ctx.fillRect(npcX + npcW * 0.7, npcY + npcH * 0.9, npcW * 0.2, npcH * 0.1);
+                    }
+                }
+            }
+            
+            // Draw player car
+            const playerX = CANVAS_WIDTH / 2 - PLAYER_WIDTH / 2 + (playerLane - LANE_COUNT / 2 + 0.5) * LANE_WIDTH;
+            const playerY = CANVAS_HEIGHT - PLAYER_HEIGHT * 1.2;
+            
+            // Draw shadow
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+            ctx.fillRect(playerX + 5, playerY + 5, PLAYER_WIDTH, PLAYER_HEIGHT);
+            
+            // Draw car body
+            ctx.fillStyle = '#000';
+            ctx.fillRect(playerX, playerY, PLAYER_WIDTH, PLAYER_HEIGHT);
+            
+            // Draw car glow based on current zone
+            ctx.shadowColor = currentZoneColor;
+            ctx.shadowBlur = 15;
+            ctx.strokeStyle = currentZoneColor;
+            ctx.lineWidth = 3;
+            ctx.strokeRect(playerX, playerY, PLAYER_WIDTH, PLAYER_HEIGHT);
+            ctx.shadowBlur = 0;
+            
+            // Draw windows
+            ctx.fillStyle = '#111';
+            ctx.fillRect(playerX + PLAYER_WIDTH * 0.1, playerY + PLAYER_HEIGHT * 0.1, PLAYER_WIDTH * 0.8, PLAYER_HEIGHT * 0.2);
+            ctx.fillRect(playerX + PLAYER_WIDTH * 0.1, playerY + PLAYER_HEIGHT * 0.6, PLAYER_WIDTH * 0.8, PLAYER_HEIGHT * 0.2);
+            
+            // Draw headlights
+            ctx.fillStyle = '#fff';
+            ctx.fillRect(playerX + PLAYER_WIDTH * 0.1, playerY, PLAYER_WIDTH * 0.2, PLAYER_HEIGHT * 0.1);
+            ctx.fillRect(playerX + PLAYER_WIDTH * 0.7, playerY, PLAYER_WIDTH * 0.2, PLAYER_HEIGHT * 0.1);
+            
+            // Draw taillights
+            ctx.fillStyle = '#f00';
+            ctx.fillRect(playerX + PLAYER_WIDTH * 0.1, playerY + PLAYER_HEIGHT * 0.9, PLAYER_WIDTH * 0.2, PLAYER_HEIGHT * 0.1);
+            ctx.fillRect(playerX + PLAYER_WIDTH * 0.7, playerY + PLAYER_HEIGHT * 0.9, PLAYER_WIDTH * 0.2, PLAYER_HEIGHT * 0.1);
+            
+            // Draw retro grid lines on ground
+            ctx.strokeStyle = 'rgba(0, 255, 255, 0.2)';
+            ctx.lineWidth = 1;
+            for (let i = 0; i < 10; i++) {
+                const gridY = HORIZON + i * (CANVAS_HEIGHT - HORIZON) / 10;
+                ctx.beginPath();
+                ctx.moveTo(0, gridY);
+                ctx.lineTo(CANVAS_WIDTH, gridY);
+                ctx.stroke();
+            }
+            
+            for (let i = 0; i < 20; i++) {
+                const gridX = i * CANVAS_WIDTH / 20;
+                ctx.beginPath();
+                ctx.moveTo(gridX, HORIZON);
+                ctx.lineTo(gridX, CANVAS_HEIGHT);
+                ctx.stroke();
+            }
+        }
+        
+        // Game loop
+        let lastTime = 0;
+        function gameLoop(timestamp) {
+            if (!lastTime) lastTime = timestamp;
+            const deltaTime = timestamp - lastTime;
+            lastTime = timestamp;
+            
+            update(deltaTime);
+            render();
+            
+            requestAnimationFrame(gameLoop);
+        }
+        
+        // Event listeners
+        document.addEventListener('keydown', (e) => {
+            if (e.code === 'Space') {
+                paused = !paused;
+                pauseScreen.style.display = paused ? 'flex' : 'none';
+            }
+            
+            if (paused) return;
+            
+            switch (e.code) {
+                case 'ArrowLeft':
+                    if (playerLane > 0) {
+                        playerLane--;
+                        showMessage("Lane change: anticipating traffic flow", 1000);
+                        score += 20;
+                        scoreElement.textContent = `Score: ${score}`;
+                    }
+                    break;
+                case 'ArrowRight':
+                    if (playerLane < LANE_COUNT - 1) {
+                        playerLane++;
+                        showMessage("Lane change: anticipating traffic flow", 1000);
+                        score += 20;
+                        scoreElement.textContent = `Score: ${score}`;
+                    }
+                    break;
+                case 'ArrowUp':
+                    // Player wants to accelerate, but DOSTH keeps within limits
+                    showMessage("Acceleration intent registered - DOSTH maintaining safe speed", 1000);
+                    break;
+                case 'ArrowDown':
+                    // Player wants to decelerate
+                    targetSpeed = Math.max(0, targetSpeed - 10);
+                    showMessage("Deceleration intent registered", 1000);
+                    break;
+            }
+        });
+        
+        // Helper functions
+        function showMessage(msg, duration) {
+            currentMessage = msg;
+            messagesElement.textContent = msg;
+            
+            if (messageTimeout) {
+                clearTimeout(messageTimeout);
+            }
+            
+            messageTimeout = setTimeout(() => {
+                messagesElement.textContent = 'DOSTH Road Survival - Experience safe, smart driving automation';
+            }, duration);
+        }
+        
+        function capitalizeFirstLetter(string) {
+            return string.charAt(0).toUpperCase() + string.slice(1);
+        }
+        
+        // Window resize handler
+        window.addEventListener('resize', () => {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+        });
+        
+        // Initialize game
+        function init() {
+            initRoad();
+            generateNPCCars();
+            requestAnimationFrame(gameLoop);
+        }
+        
+        // Start the game
+        init();
+    </script>
 </body>
 </html>
