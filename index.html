@@ -1,3 +1,4 @@
+<!-- index.html -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -9,65 +10,13 @@
 <body>
     <div class="game-container">
         <canvas id="gameCanvas"></canvas>
-        
-        <!-- Start Screen -->
-        <div id="startScreen" class="screen">
-            <h1>Traffic Harmony</h1>
-            <button id="startButton">START</button>
-            <div class="instructions">
-                <p>↑ ↓ - Switch Lanes</p>
-                <p>← → - Decelerate/Accelerate</p>
-                <p>SPACE - Pause</p>
-            </div>
-        </div>
-        
-        <!-- Game UI -->
-        <div id="gameUI">
-            <div class="hearts">
-                <div class="heart"></div>
-                <div class="heart"></div>
-                <div class="heart"></div>
-            </div>
-            <div class="speed-meter">
-                <span id="speedValue">0</span> km/h
-            </div>
-            <div class="score">
-                Score: <span id="scoreValue">0</span>
-            </div>
-            <div class="controls">
-                <button id="soundButton" class="control-button"></button>
-                <button id="pauseButton" class="control-button"></button>
-            </div>
-        </div>
-        
-        <!-- Pause Screen -->
-        <div id="pauseScreen" class="screen">
-            <h2>PAUSED</h2>
-            <button id="resumeButton">RESUME</button>
-            <button id="restartButton">RESTART</button>
-        </div>
-        
-        <!-- Game Over Screen -->
-        <div id="gameOverScreen" class="screen">
-            <h2>GAME OVER</h2>
-            <div class="score-container">
-                <div class="score-box">
-                    <h3>SCORE</h3>
-                    <span id="finalScore">0</span>
-                </div>
-                <div class="score-box">
-                    <h3>BEST</h3>
-                    <span id="bestScore">0</span>
-                </div>
-            </div>
-            <div class="action-buttons">
-                <button id="restartGameButton" class="action-button"></button>
-                <button id="homeButton" class="action-button"></button>
-                <button id="shareButton" class="action-button"></button>
-            </div>
+        <div id="score">Score: 0</div>
+        <div id="gameOver" class="hidden">
+            <h2>Game Over</h2>
+            <p id="finalScore">Score: 0</p>
+            <button id="restartButton">Play Again</button>
         </div>
     </div>
-    
     <script src="game.js"></script>
 </body>
 </html>
