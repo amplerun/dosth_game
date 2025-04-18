@@ -1,57 +1,372 @@
+/* File: styles.css */
+:root {
+  --red-zone: rgba(255, 60, 60, 0.2);
+  --yellow-zone: rgba(255, 220, 60, 0.2);
+  --green-zone: rgba(60, 255, 130, 0.2);
+  --grid-color: rgba(100, 100, 255, 0.15);
+  --road-color: #222;
+  --lane-color: rgba(255, 255, 255, 0.5);
+}
+
 * {
   margin: 0;
   padding: 0;
   box-sizing: border-box;
+  font-family: 'Arial', sans-serif;
 }
+
 body {
-  font-family: monospace;
-  background-color: black;
-  color: white;
+  background-color: #111;
+  color: #fff;
   overflow: hidden;
 }
-#game {
+
+.game-container {
   position: relative;
   width: 100vw;
   height: 100vh;
+  overflow: hidden;
 }
-#overlay {
+
+.score-container {
+  position: absolute;
+  top: 20px;
+  right: 20px;
+  background: rgba(0, 0, 0, 0.7);
+  padding: 15px;
+  border-radius: 10px;
+  border: 1px solid rgba(100, 200, 255, 0.5);
+  box-shadow: 0 0 15px rgba(100, 200, 255, 0.3);
+  z-index: 100;
+  min-width: 200px;
+}
+
+.score-title {
+  font-size: 1.2rem;
+  margin-bottom: 10px;
+  color: #3cf;
+  text-align: center;
+}
+
+.score-item {
+  display: flex;
+  justify-content: space-between;
+  margin: 8px 0;
+}
+
+.score-value {
+  color: #3cf;
+}
+
+.info-container {
+  position: absolute;
+  top: 20px;
+  left: 20px;
+  background: rgba(0, 0, 0, 0.7);
+  padding: 15px;
+  border-radius: 10px;
+  border: 1px solid rgba(100, 200, 255, 0.5);
+  box-shadow: 0 0 15px rgba(100, 200, 255, 0.3);
+  z-index: 100;
+  max-width: 300px;
+}
+
+.info-title {
+  font-size: 1.2rem;
+  margin-bottom: 10px;
+  color: #3cf;
+}
+
+.info-text {
+  margin-bottom: 8px;
+  line-height: 1.4;
+}
+
+.zone-indicator {
+  font-weight: bold;
+  font-size: 1.2rem;
+  margin-top: 10px;
+}
+
+.zone-indicator.red {
+  color: #f66;
+}
+
+.zone-indicator.yellow {
+  color: #ff6;
+}
+
+.zone-indicator.green {
+  color: #6f6;
+}
+
+.road {
   position: absolute;
   width: 100%;
   height: 100%;
-  background-color: green;
-  opacity: 0.3;
-  z-index: 0;
+  background-color: var(--road-color);
+  perspective: 500px;
+  overflow: hidden;
 }
-#player {
+
+.grid {
   position: absolute;
-  width: 40px;
-  height: 60px;
-  background-color: lime;
-  border: 4px solid black;
+  width: 200%;
+  height: 200%;
+  background: 
+    linear-gradient(90deg, var(--grid-color) 1px, transparent 1px) 0 0 / 100px 100px,
+    linear-gradient(0deg, var(--grid-color) 1px, transparent 1px) 0 0 / 100px 100px;
+  transform-origin: center;
+  transform: rotateX(60deg) translateY(-50%) translateZ(-200px);
+  animation: gridMove 20s linear infinite;
+}
+
+@keyframes gridMove {
+  from { background-position: 0 0; }
+  to { background-position: 0 100px; }
+}
+
+.lane {
+  position: absolute;
+  height: 100%;
+  width: 2px;
+  background: var(--lane-color);
+  top: 0;
+}
+
+.zone-background {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  transition: background-color 1s ease;
+}
+
+.car {
+  position: absolute;
+  width: 60px;
+  height: 100px;
+  background-color: #000;
   border-radius: 10px;
+  transform-origin: center;
+  transition: left 0.3s ease;
+  box-shadow: 0 0 15px rgba(100, 200, 255, 0.5);
   z-index: 10;
 }
-.npc {
+
+.player-car {
+  background-color: #000;
+  box-shadow: 0 0 20px rgba(60, 200, 255, 0.8);
+  border: 2px solid #3cf;
+}
+
+.npc-car {
+  background-color: #333;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+}
+
+.npc-car.red {
+  box-shadow: 0 0 15px rgba(255, 100, 100, 0.5);
+  border-color: rgba(255, 100, 100, 0.8);
+}
+
+.npc-car.blue {
+  box-shadow: 0 0 15px rgba(100, 100, 255, 0.5);
+  border-color: rgba(100, 100, 255, 0.8);
+}
+
+.npc-car.purple {
+  box-shadow: 0 0 15px rgba(200, 100, 255, 0.5);
+  border-color: rgba(200, 100, 255, 0.8);
+}
+
+.npc-car.green {
+  box-shadow: 0 0 15px rgba(100, 255, 100, 0.5);
+  border-color: rgba(100, 255, 100, 0.8);
+}
+
+.car-headlight {
+  position: absolute;
+  width: 10px;
+  height: 5px;
+  background-color: rgba(255, 255, 200, 0.8);
+  border-radius: 50%;
+  top: 10px;
+}
+
+.car-headlight.left {
+  left: 10px;
+}
+
+.car-headlight.right {
+  right: 10px;
+}
+
+.car-taillight {
+  position: absolute;
+  width: 12px;
+  height: 5px;
+  background-color: rgba(255, 50, 50, 0.8);
+  border-radius: 50%;
+  bottom: 10px;
+}
+
+.car-taillight.left {
+  left: 10px;
+}
+
+.car-taillight.right {
+  right: 10px;
+}
+
+.car-window {
   position: absolute;
   width: 40px;
-  height: 60px;
-  background-color: white;
-  opacity: 0.8;
-  border-radius: 10px;
+  height: 20px;
+  background-color: rgba(100, 200, 255, 0.4);
+  border-radius: 5px;
+  left: 10px;
+  top: 25px;
+}
+
+.junction {
+  position: absolute;
+  width: 100%;
+  height: 150px;
+  background-color: rgba(80, 80, 80, 0.7);
+  display: flex;
+  justify-content: center;
+  align-items: center;
   z-index: 5;
 }
-#hud {
-  position: absolute;
-  top: 10px;
-  left: 10px;
-  z-index: 20;
-  line-height: 1.5;
+
+.junction-signal {
+  width: 50px;
+  height: 50px;
+  border-radius: 50%;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  font-size: 24px;
 }
-#footer {
+
+.junction-signal.stop {
+  background-color: rgba(255, 0, 0, 0.3);
+  border: 2px solid rgba(255, 0, 0, 0.8);
+  box-shadow: 0 0 15px rgba(255, 0, 0, 0.5);
+  color: #fff;
+}
+
+.junction-signal.go {
+  background-color: rgba(0, 255, 0, 0.3);
+  border: 2px solid rgba(0, 255, 0, 0.8);
+  box-shadow: 0 0 15px rgba(0, 255, 0, 0.5);
+  color: #fff;
+}
+
+.speed-indicator {
   position: absolute;
-  bottom: 10px;
+  bottom: 30px;
   left: 50%;
   transform: translateX(-50%);
-  opacity: 0.6;
-  font-size: 14px;
+  background: rgba(0, 0, 0, 0.7);
+  padding: 15px 30px;
+  border-radius: 30px;
+  border: 1px solid rgba(100, 200, 255, 0.5);
+  box-shadow: 0 0 15px rgba(100, 200, 255, 0.3);
+  text-align: center;
+  z-index: 100;
+}
+
+.speed-value {
+  font-size: 1.8rem;
+  font-weight: bold;
+  color: #3cf;
+  margin-bottom: 5px;
+}
+
+.speed-max {
+  font-size: 0.9rem;
+  color: #aaa;
+}
+
+.controls-info {
+  position: absolute;
+  bottom: 100px;
+  left: 50%;
+  transform: translateX(-50%);
+  color: rgba(255, 255, 255, 0.5);
+  font-size: 0.9rem;
+  text-align: center;
+}
+
+.message-overlay {
+  position: absolute;
+  top: 40%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  background: rgba(0, 0, 0, 0.8);
+  padding: 20px 40px;
+  border-radius: 20px;
+  border: 2px solid #3cf;
+  box-shadow: 0 0 30px rgba(60, 200, 255, 0.5);
+  text-align: center;
+  z-index: 200;
+  opacity: 0;
+  transition: opacity 0.5s;
+  pointer-events: none;
+}
+
+.message-overlay.visible {
+  opacity: 1;
+}
+
+.message-title {
+  font-size: 1.5rem;
+  color: #3cf;
+  margin-bottom: 10px;
+}
+
+.message-text {
+  font-size: 1.1rem;
+  line-height: 1.5;
+}
+
+.pause-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0, 0, 0, 0.7);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 300;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.5s;
+}
+
+.pause-overlay.visible {
+  opacity: 1;
+  pointer-events: all;
+}
+
+.pause-text {
+  font-size: 3rem;
+  color: #3cf;
+  text-shadow: 0 0 20px rgba(60, 200, 255, 0.8);
+}
+
+.footer {
+  position: absolute;
+  bottom: 10px;
+  left: 0;
+  width: 100%;
+  text-align: center;
+  color: rgba(255, 255, 255, 0.5);
+  font-size: 0.8rem;
+  z-index: 50;
 }
