@@ -1,25 +1,238 @@
-/* style.css */
-body {
+* {
     margin: 0;
-    overflow: hidden;
-    background: #1a1a1a;
+    padding: 0;
+    box-sizing: border-box;
+    font-family: 'Arial', sans-serif;
+}
+
+body {
+    background-color: #121212;
     display: flex;
     justify-content: center;
     align-items: center;
     height: 100vh;
+    overflow: hidden;
+}
+
+.game-container {
+    position: relative;
+    width: 360px;
+    height: 640px;
+    overflow: hidden;
 }
 
 #gameCanvas {
-    border: 2px solid #2ecc71;
-    image-rendering: pixelated;
+    background-color: #333;
+    width: 100%;
+    height: 100%;
 }
 
-#hud {
-    position: fixed;
-    top: 10px;
+/* Screens */
+.screen {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    background-color: rgba(0, 0, 0, 0.8);
+    color: #fff;
+    z-index: 10;
+}
+
+#startScreen {
+    background: linear-gradient(to bottom, #2c3e50, #1a1a2e);
+}
+
+#startScreen h1 {
+    font-size: 36px;
+    margin-bottom: 40px;
+    color: #3498db;
+    text-shadow: 0 0 10px #3498db;
+}
+
+#pauseScreen, #gameOverScreen {
+    display: none;
+}
+
+.instructions {
+    margin-top: 30px;
+    text-align: center;
+    padding: 20px;
+    border-radius: 10px;
+    background-color: rgba(255, 255, 255, 0.1);
+}
+
+.instructions p {
+    margin: 10px 0;
+    font-size: 16px;
+}
+
+/* Buttons */
+button {
+    background-color: #3498db;
+    color: white;
+    border: none;
+    padding: 12px 24px;
+    font-size: 18px;
+    border-radius: 30px;
+    cursor: pointer;
+    margin: 10px;
+    transition: all 0.3s ease;
+    box-shadow: 0 0 10px rgba(52, 152, 219, 0.7);
+}
+
+button:hover {
+    background-color: #2980b9;
+    transform: scale(1.05);
+    box-shadow: 0 0 15px rgba(52, 152, 219, 0.9);
+}
+
+/* Game UI */
+#gameUI {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    padding: 10px;
+    display: none;
+}
+
+.hearts {
+    display: flex;
+    gap: 5px;
+    margin-bottom: 10px;
+}
+
+.heart {
+    width: 25px;
+    height: 25px;
+    background-color: #e74c3c;
+    clip-path: path('M12.5,0 C11,0 9.5,1 9.5,3 C9.5,1 8,0 6.5,0 C3.5,0 2,3 2,5.5 C2,8 4,10.5 9.5,15 C15,10.5 17,8 17,5.5 C17,3 15.5,0 12.5,0 Z');
+}
+
+.speed-meter {
+    position: absolute;
     left: 10px;
-    color: #2ecc71;
-    font-family: 'Courier New', monospace;
-    font-size: 20px;
-    text-shadow: 0 0 5px rgba(46, 204, 113, 0.5);
+    bottom: 10px;
+    background-color: rgba(0, 0, 0, 0.5);
+    color: #fff;
+    padding: 5px 10px;
+    border-radius: 15px;
+    font-size: 14px;
+}
+
+.score {
+    position: absolute;
+    right: 10px;
+    bottom: 10px;
+    background-color: rgba(0, 0, 0, 0.5);
+    color: #fff;
+    padding: 5px 10px;
+    border-radius: 15px;
+    font-size: 14px;
+}
+
+.controls {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    display: flex;
+    gap: 10px;
+}
+
+.control-button {
+    width: 40px;
+    height: 40px;
+    padding: 0;
+    border-radius: 50%;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+
+#soundButton {
+    background-color: #3498db;
+    background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="white"><path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z"/></svg>');
+    background-position: center;
+    background-repeat: no-repeat;
+}
+
+#pauseButton {
+    background-color: #3498db;
+    background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="white"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>');
+    background-position: center;
+    background-repeat: no-repeat;
+}
+
+/* Game Over Screen */
+.score-container {
+    display: flex;
+    width: 100%;
+    padding: 0 20px;
+    margin: 20px 0;
+}
+
+.score-box {
+    flex: 1;
+    text-align: center;
+    padding: 15px;
+    border-radius: 10px;
+    margin: 0 10px;
+}
+
+.score-box:nth-child(1) {
+    background-color: #f1c40f;
+}
+
+.score-box:nth-child(2) {
+    background-color: #e74c3c;
+}
+
+.score-box h3 {
+    color: #333;
+    margin-bottom: 10px;
+    font-size: 18px;
+}
+
+.score-box span {
+    font-size: 36px;
+    font-weight: bold;
+    color: #fff;
+}
+
+.action-buttons {
+    display: flex;
+    margin-top: 30px;
+}
+
+.action-button {
+    width: 60px;
+    height: 60px;
+    border-radius: 10px;
+    padding: 0;
+}
+
+#restartGameButton {
+    background-color: #f1c40f;
+    background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="white"><path d="M17.65 6.35A7.958 7.958 0 0012 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08A5.99 5.99 0 0112 18c-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/></svg>');
+    background-position: center;
+    background-repeat: no-repeat;
+}
+
+#homeButton {
+    background-color: #e74c3c;
+    background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="white"><path d="M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z"/></svg>');
+    background-position: center;
+    background-repeat: no-repeat;
+}
+
+#shareButton {
+    background-color: #3498db;
+    background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="white"><path d="M18 16.08c-.76 0-1.44.3-1.96.77L8.91 12.7c.05-.23.09-.46.09-.7s-.04-.47-.09-.7l7.05-4.11c.54.5 1.25.81 2.04.81 1.66 0 3-1.34 3-3s-1.34-3-3-3-3 1.34-3 3c0 .24.04.47.09.7L8.04 9.81C7.5 9.31 6.79 9 6 9c-1.66 0-3 1.34-3 3s1.34 3 3 3c.79 0 1.5-.31 2.04-.81l7.12 4.16c-.05.21-.08.43-.08.65 0 1.61 1.31 2.92 2.92 2.92 1.61 0 2.92-1.31 2.92-2.92s-1.31-2.92-2.92-2.92z"/></svg>');
+    background-position: center;
+    background-repeat: no-repeat;
 }
