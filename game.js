@@ -1,501 +1,508 @@
-// --------- Game Constants ---------
-const CANVAS_WIDTH = 360;
-const CANVAS_HEIGHT = 640;
-const ROAD_WIDTH = 240;
-const LANE_WIDTH = ROAD_WIDTH / 4;
-const LANE_POSITIONS = [
-    CANVAS_WIDTH / 2 - ROAD_WIDTH / 2 + LANE_WIDTH / 2,
-    CANVAS_WIDTH / 2 - ROAD_WIDTH / 2 + LANE_WIDTH * 1.5,
-    CANVAS_WIDTH / 2 - ROAD_WIDTH / 2 + LANE_WIDTH * 2.5,
-    CANVAS_WIDTH / 2 - ROAD_WIDTH / 2 + LANE_WIDTH * 3.5
-];
-const SPEED_ZONE_TYPES = {
-    NORMAL: { color: '#fff', limit: 70 },
-    SLOW: { color: '#f39c12', limit: 50 },
-    VERY_SLOW: { color: '#e74c3c', limit: 30 }
+// game.js
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
+const scoreDisplay = document.getElementById('score');
+const gameOverScreen = document.getElementById('gameOver');
+const finalScoreDisplay = document.getElementById('finalScore');
+const restartButton = document.getElementById('restartButton');
+
+// Canvas setup
+canvas.width = 400;
+canvas.height = 600;
+
+// Game constants
+const LANE_COUNT = 4;
+const LANE_WIDTH = canvas.width / LANE_COUNT;
+const CAR_WIDTH = 30;
+const CAR_HEIGHT = 50;
+const ROAD_SPEED = 2;
+const MAX_SPEED = 70; // 70 km/h as max speed
+const ACCELERATION = 0.2;
+const DECELERATION = 0.3;
+const NPC_SPAWN_RATE = 2000; // ms between spawns
+const SPEED_ZONE_SPAWN_RATE = 5000; // ms between speed zone spawns
+const JUNCTION_SPAWN_RATE = 15000; // ms between junction spawns
+
+// Game state
+let gameState = {
+    playing: true,
+    paused: false,
+    score: 0,
+    bonusPoints: 0,
+    timeElapsed: 0
 };
-const MAX_SPEED = 70;
-const MIN_SPEED = 0;
-const ACCELERATION_RATE = 0.5;
-const DECELERATION_RATE = 0.3;
-const TRAFFIC_FOLLOWING_DISTANCE = 60; // Minimum distance to car ahead
-const JUNCTION_APPROACH_DISTANCE = 100; // Distance to start slowing for junction
-const BONUS_POINTS_DISTANCE = 80; // Distance to earn bonus points by changing lanes
-const GAME_TICK = 1000 / 60; // 60 FPS
 
-// --------- Game Variables ---------
-let canvas, ctx;
-let gameState = 'start'; // 'start', 'playing', 'paused', 'gameOver'
-let lastTime = 0;
-let deltaTime = 0;
-let score = 0;
-let bestScore = localStorage.getItem('bestScore') || 0;
-let scoreTimer = 0;
-let lives = 3;
-let soundEnabled = true;
-let roadOffset = 0;
-let roadSpeed = 3;
-let lastLaneChangeTime = 0;
-let bonusPointsEarned = false;
-
-// --------- Game Objects ---------
-const playerCar = {
-    x: LANE_POSITIONS[1],
-    y: CANVAS_HEIGHT - 100,
-    width: 30,
-    height: 50,
+// Player car
+let playerCar = {
+    x: LANE_WIDTH * 1.5 - CAR_WIDTH / 2, // Center of second lane
+    y: canvas.height - CAR_HEIGHT - 20,
     lane: 1,
-    targetLane: 1,
-    speed: 0,
-    targetSpeed: 0,
-    acceleration: 0,
-    isChangingLanes: false,
-    laneChangeSpeed: 5,
-    color: '#2ecc71'
+    speed: 20, // Starting speed in km/h
+    changingLane: false,
+    targetLane: 1
 };
 
-// Arrays to store game elements
+// Game objects
 let npcCars = [];
 let speedZones = [];
 let junctions = [];
+let roadOffset = 0;
 
-// --------- Event Listeners ---------
-window.addEventListener('load', init);
+// Controls
+const keys = {
+    up: false,
+    down: false,
+    left: false,
+    right: false,
+    space: false
+};
 
-function init() {
-    canvas = document.getElementById('gameCanvas');
-    canvas.width = CANVAS_WIDTH;
-    canvas.height = CANVAS_HEIGHT;
-    ctx = canvas.getContext('2d');
-    
-    // Setup buttons
-    document.getElementById('startButton').addEventListener('click', startGame);
-    document.getElementById('pauseButton').addEventListener('click', togglePause);
-    document.getElementById('resumeButton').addEventListener('click', resumeGame);
-    document.getElementById('restartButton').addEventListener('click', restartGame);
-    document.getElementById('restartGameButton').addEventListener('click', restartGame);
-    document.getElementById('homeButton').addEventListener('click', goToHome);
-    document.getElementById('soundButton').addEventListener('click', toggleSound);
-    document.getElementById('shareButton').addEventListener('click', shareScore);
-    
-    // Setup keyboard controls
-    document.addEventListener('keydown', handleKeyDown);
-    document.addEventListener('keyup', handleKeyUp);
-    
-    // Load best score from localStorage
-    updateBestScore();
-    
-    // Start animation loop
-    requestAnimationFrame(gameLoop);
-}
+// Event listeners
+window.addEventListener('keydown', handleKeyDown);
+window.addEventListener('keyup', handleKeyUp);
+restartButton.addEventListener('click', restartGame);
 
-// --------- Game States ---------
-function startGame() {
-    gameState = 'playing';
-    score = 0;
-    lives = 3;
-    roadOffset = 0;
-    lastLaneChangeTime = 0;
-    playerCar.lane = 1;
-    playerCar.targetLane = 1;
-    playerCar.x = LANE_POSITIONS[1];
-    playerCar.speed = 0;
-    playerCar.targetSpeed = 0;
-    playerCar.isChangingLanes = false;
-    
-    // Reset game arrays
-    npcCars = [];
-    speedZones = [];
-    junctions = [];
-    
-    // Initial spawns
-    spawnSpeedZone();
-    spawnJunction();
-    
-    // Update UI
-    document.getElementById('startScreen').style.display = 'none';
-    document.getElementById('pauseScreen').style.display = 'none';
-    document.getElementById('gameOverScreen').style.display = 'none';
-    document.getElementById('gameUI').style.display = 'block';
-    updateScore();
-    updateHearts();
-}
-
-function togglePause() {
-    if (gameState === 'playing') {
-        gameState = 'paused';
-        document.getElementById('pauseScreen').style.display = 'flex';
-    } else if (gameState === 'paused') {
-        resumeGame();
-    }
-}
-
-function resumeGame() {
-    if (gameState === 'paused') {
-        gameState = 'playing';
-        document.getElementById('pauseScreen').style.display = 'none';
-    }
-}
-
-function restartGame() {
-    startGame();
-}
-
-function gameOver() {
-    gameState = 'gameOver';
-    
-    // Update best score
-    if (score > bestScore) {
-        bestScore = score;
-        localStorage.setItem('bestScore', bestScore);
-        updateBestScore();
-    }
-    
-    // Update UI
-    document.getElementById('finalScore').textContent = score;
-    document.getElementById('bestScore').textContent = bestScore;
-    document.getElementById('gameOverScreen').style.display = 'flex';
-}
-
-function goToHome() {
-    gameState = 'start';
-    document.getElementById('gameOverScreen').style.display = 'none';
-    document.getElementById('gameUI').style.display = 'none';
-    document.getElementById('startScreen').style.display = 'flex';
-}
-
-function toggleSound() {
-    soundEnabled = !soundEnabled;
-    // Would implement actual sound toggling here
-}
-
-function shareScore() {
-    // Would implement sharing functionality here
-    alert('Share your score: ' + score);
-}
-
-// --------- Input Handling ---------
 function handleKeyDown(e) {
-    if (gameState !== 'playing') return;
-    
-    switch (e.key) {
+    switch(e.key) {
         case 'ArrowUp':
-            if (playerCar.lane > 0 && !playerCar.isChangingLanes) {
+            keys.up = true;
+            if (!playerCar.changingLane && playerCar.lane > 0) {
+                playerCar.changingLane = true;
                 playerCar.targetLane = playerCar.lane - 1;
-                playerCar.isChangingLanes = true;
-                lastLaneChangeTime = Date.now();
-                checkLaneChangeBonus();
             }
             break;
         case 'ArrowDown':
-            if (playerCar.lane < 3 && !playerCar.isChangingLanes) {
+            keys.down = true;
+            if (!playerCar.changingLane && playerCar.lane < LANE_COUNT - 1) {
+                playerCar.changingLane = true;
                 playerCar.targetLane = playerCar.lane + 1;
-                playerCar.isChangingLanes = true;
-                lastLaneChangeTime = Date.now();
-                checkLaneChangeBonus();
             }
             break;
         case 'ArrowLeft':
-            playerCar.targetSpeed = Math.max(playerCar.targetSpeed - ACCELERATION_RATE * 10, MIN_SPEED);
+            keys.left = true; // Decelerate
             break;
         case 'ArrowRight':
-            playerCar.targetSpeed = Math.min(playerCar.targetSpeed + ACCELERATION_RATE * 10, MAX_SPEED);
+            keys.right = true; // Accelerate
             break;
         case ' ':
+            keys.space = true;
             togglePause();
             break;
     }
 }
 
 function handleKeyUp(e) {
-    if (gameState !== 'playing') return;
-    
-    switch (e.key) {
+    switch(e.key) {
+        case 'ArrowUp':
+            keys.up = false;
+            break;
+        case 'ArrowDown':
+            keys.down = false;
+            break;
         case 'ArrowLeft':
+            keys.left = false;
+            break;
         case 'ArrowRight':
-            // playerCar.acceleration = 0;
+            keys.right = false;
+            break;
+        case ' ':
+            keys.space = false;
             break;
     }
 }
 
-// --------- Game Logic ---------
+function togglePause() {
+    gameState.paused = !gameState.paused;
+}
+
+// Game initialization
+function init() {
+    // Reset game objects
+    npcCars = [];
+    speedZones = [];
+    junctions = [];
+    
+    // Reset player
+    playerCar = {
+        x: LANE_WIDTH * 1.5 - CAR_WIDTH / 2,
+        y: canvas.height - CAR_HEIGHT - 20,
+        lane: 1,
+        speed: 20,
+        changingLane: false,
+        targetLane: 1
+    };
+    
+    // Reset game state
+    gameState = {
+        playing: true,
+        paused: false,
+        score: 0,
+        bonusPoints: 0,
+        timeElapsed: 0
+    };
+    
+    // Hide game over screen
+    gameOverScreen.classList.add('hidden');
+    
+    // Set up spawning intervals
+    setInterval(spawnNPC, NPC_SPAWN_RATE);
+    setInterval(spawnSpeedZone, SPEED_ZONE_SPAWN_RATE);
+    setInterval(spawnJunction, JUNCTION_SPAWN_RATE);
+    
+    // Start the game loop
+    requestAnimationFrame(gameLoop);
+}
+
+// Game loop
 function gameLoop(timestamp) {
-    // Calculate delta time
-    if (!lastTime) lastTime = timestamp;
-    deltaTime = timestamp - lastTime;
-    lastTime = timestamp;
+    if (!gameState.playing) return;
     
-    // Clear canvas
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    
-    if (gameState === 'playing') {
-        update(deltaTime);
+    if (!gameState.paused) {
+        update();
         checkCollisions();
+        updateScore();
     }
     
     render();
     
-    // Loop
     requestAnimationFrame(gameLoop);
 }
 
-function update(deltaTime) {
-    // Increment score timer
-    scoreTimer += deltaTime;
-    if (scoreTimer >= 1000) {
-        score++;
-        scoreTimer = 0;
-        updateScore();
-    }
+// Update game state
+function update() {
+    // Update road position
+    roadOffset = (roadOffset + ROAD_SPEED) % (LANE_WIDTH / 2);
     
-    // Update player car
-    updatePlayerCar(deltaTime);
-    
-    // Update road offset for scrolling effect
-    roadOffset += roadSpeed * (playerCar.speed / MAX_SPEED);
-    if (roadOffset > 40) roadOffset = 0;
-    
-    // Update NPC cars
-    updateNPCCars(deltaTime);
-    
-    // Update speed zones
-    updateSpeedZones(deltaTime);
-    
-    // Update junctions
-    updateJunctions(deltaTime);
-    
-    // Spawn new elements
-    if (Math.random() < 0.01) {
-        spawnNPCCar();
-    }
-    
-    if (Math.random() < 0.005) {
-        spawnSpeedZone();
-    }
-    
-    if (Math.random() < 0.002) {
-        spawnJunction();
-    }
-}
-
-function updatePlayerCar(deltaTime) {
     // Handle lane changing
-    if (playerCar.isChangingLanes) {
-        const targetX = LANE_POSITIONS[playerCar.targetLane];
-        const dx = targetX - playerCar.x;
+    if (playerCar.changingLane) {
+        const targetX = playerCar.targetLane * LANE_WIDTH + (LANE_WIDTH / 2) - (CAR_WIDTH / 2);
+        const difference = targetX - playerCar.x;
         
-        if (Math.abs(dx) < playerCar.laneChangeSpeed) {
+        if (Math.abs(difference) < 2) {
             playerCar.x = targetX;
             playerCar.lane = playerCar.targetLane;
-            playerCar.isChangingLanes = false;
+            playerCar.changingLane = false;
         } else {
-            playerCar.x += Math.sign(dx) * playerCar.laneChangeSpeed;
+            playerCar.x += difference * 0.1;
         }
     }
     
     // Handle acceleration/deceleration
-    if (playerCar.speed < playerCar.targetSpeed) {
-        playerCar.speed = Math.min(playerCar.speed + ACCELERATION_RATE, playerCar.targetSpeed);
-    } else if (playerCar.speed > playerCar.targetSpeed) {
-        playerCar.speed = Math.max(playerCar.speed - DECELERATION_RATE, playerCar.targetSpeed);
+    if (keys.right && playerCar.speed < MAX_SPEED) {
+        playerCar.speed += ACCELERATION;
     }
     
-    // Check if player is in a speed zone
-    checkSpeedZones();
+    if (keys.left && playerCar.speed > 0) {
+        playerCar.speed -= DECELERATION;
+        if (playerCar.speed < 0) playerCar.speed = 0;
+    }
     
-    // Check if player is approaching junction
-    checkJunctionApproach();
+    // Cap player speed to MAX_SPEED
+    playerCar.speed = Math.min(playerCar.speed, MAX_SPEED);
     
-    // Check if player is too close to NPC car
-    checkTrafficFollowing();
-    
-    // Update speed display
-    document.getElementById('speedValue').textContent = Math.round(playerCar.speed);
-}
-
-function updateNPCCars(deltaTime) {
+    // Update NPCs
     for (let i = npcCars.length - 1; i >= 0; i--) {
-        const car = npcCars[i];
+        const npc = npcCars[i];
+        npc.y += (npc.speed / 10) - (playerCar.speed / 10);
         
-        // Move car forward
-        car.y += (playerCar.speed - car.speed) * 0.5;
-        
-        // Remove cars that are off-screen
-        if (car.y > CANVAS_HEIGHT + 100) {
+        // Remove NPCs that are off screen
+        if (npc.y > canvas.height) {
             npcCars.splice(i, 1);
         }
     }
-}
-
-function updateSpeedZones(deltaTime) {
+    
+    // Update speed zones
     for (let i = speedZones.length - 1; i >= 0; i--) {
         const zone = speedZones[i];
+        zone.y += ROAD_SPEED;
         
-        // Move zone with road
-        zone.y += playerCar.speed * 0.5;
+        // Check if player is in speed zone
+        if (zone.y <= playerCar.y + CAR_HEIGHT && 
+            zone.y + zone.height >= playerCar.y) {
+            
+            // Check if player is speeding
+            if (playerCar.speed > zone.speedLimit) {
+                gameOver("You were speeding in a speed zone!");
+                return;
+            }
+        }
         
-        // Remove zones that are off-screen
-        if (zone.y > CANVAS_HEIGHT + 200) {
+        // Remove zones that are off screen
+        if (zone.y > canvas.height) {
             speedZones.splice(i, 1);
         }
     }
-}
-
-function updateJunctions(deltaTime) {
+    
+    // Update junctions
     for (let i = junctions.length - 1; i >= 0; i--) {
         const junction = junctions[i];
+        junction.y += ROAD_SPEED;
         
-        // Move junction with road
-        junction.y += playerCar.speed * 0.5;
-        
-        // Update junction state
-        if (junction.active && junction.y >= playerCar.y - 50 && junction.y <= playerCar.y + 50) {
-            // Check if player has stopped
-            if (playerCar.speed === 0) {
-                junction.crossed = true;
-                junction.waitTimer = 3000; // Wait 3 seconds before allowing crossing
-            } else if (!junction.priority && !junction.crossed) {
-                // Game over if player doesn't stop at junction without priority
-                loseLife('You failed to stop at the junction!');
+        // Check if player is at junction stop line
+        if (Math.abs(junction.y - playerCar.y) < 5) {
+            // Player must come to a full stop at junction
+            if (!junction.playerStopped && playerCar.speed > 0) {
+                gameOver("You didn't stop at the junction!");
+                return;
+            } else if (playerCar.speed === 0) {
+                junction.playerStopped = true;
+                
+                // Grant priority after stopping
+                setTimeout(() => {
+                    junction.playerHasPriority = true;
+                }, 1000);
             }
         }
         
-        // Count down wait timer
-        if (junction.waitTimer > 0) {
-            junction.waitTimer -= deltaTime;
-            if (junction.waitTimer <= 0) {
-                junction.priority = true;
-            }
+        // Check if player is crossing junction without priority
+        if (junction.y <= playerCar.y + CAR_HEIGHT && 
+            junction.y + junction.height >= playerCar.y && 
+            !junction.playerHasPriority && playerCar.speed > 0) {
+            gameOver("You crossed a junction without priority!");
+            return;
         }
         
-        // Remove junctions that are off-screen
-        if (junction.y > CANVAS_HEIGHT + 200) {
+        // Remove junctions that are off screen
+        if (junction.y > canvas.height) {
             junctions.splice(i, 1);
         }
     }
-}
-
-function checkSpeedZones() {
-    for (const zone of speedZones) {
-        if (zone.y >= playerCar.y - 100 && zone.y <= playerCar.y + 100) {
-            // Player is in speed zone
-            if (playerCar.speed > zone.limit) {
-                loseLife('You exceeded the speed limit in a speed zone!');
-            } else {
-                // Ensure player stays within speed limit
-                playerCar.targetSpeed = Math.min(playerCar.targetSpeed, zone.limit);
-            }
-        }
-    }
-}
-
-function checkJunctionApproach() {
-    for (const junction of junctions) {
-        const distance = junction.y - playerCar.y;
-        if (distance > 0 && distance < JUNCTION_APPROACH_DISTANCE) {
-            // Player is approaching junction
-            if (!junction.priority) {
-                // Reduce target speed as player approaches junction
-                const factor = 1 - ((JUNCTION_APPROACH_DISTANCE - distance) / JUNCTION_APPROACH_DISTANCE);
-                playerCar.targetSpeed = Math.min(playerCar.targetSpeed, MAX_SPEED * factor);
-            }
-        }
-    }
-}
-
-function checkTrafficFollowing() {
-    for (const car of npcCars) {
-        if (car.lane === playerCar.lane) {
-            const distance = car.y - playerCar.y;
-            if (distance > 0 && distance < TRAFFIC_FOLLOWING_DISTANCE) {
-                // Too close to car ahead
-                const factor = distance / TRAFFIC_FOLLOWING_DISTANCE;
-                playerCar.targetSpeed = Math.min(playerCar.targetSpeed, car.speed * factor);
-            }
-        }
-    }
-}
-
-function checkLaneChangeBonus() {
-    // Check if lane change was to avoid traffic
-    for (const car of npcCars) {
-        if (car.lane === playerCar.lane && !bonusPointsEarned) {
-            const distance = car.y - playerCar.y;
-            if (distance > 0 && distance < BONUS_POINTS_DISTANCE) {
-                // Award bonus points for smart lane change
-                score += 5;
-                bonusPointsEarned = true;
-                updateScore();
-                // Reset bonus points timer
-                setTimeout(() => {
-                    bonusPointsEarned = false;
-                }, 3000);
-            }
-        }
-    }
-}
-
-function checkCollisions() {
-    // Check for collisions with NPC cars
-    for (const car of npcCars) {
-        if (collision(playerCar, car)) {
-            loseLife('You crashed into another vehicle!');
-        }
-    }
-}
-
-function collision(obj1, obj2) {
-    return (
-        obj1.x < obj2.x + obj2.width &&
-        obj1.x + obj1.width > obj2.x &&
-        obj1.y < obj2.y + obj2.height &&
-        obj1.y + obj1.height > obj2.y
-    );
-}
-
-function loseLife(reason) {
-    lives--;
-    updateHearts();
     
-    if (lives <= 0) {
-        gameOver();
-    } else {
-        // Show reason why life was lost
-        showNotification(reason);
-        
-        // Reset player speed
-        playerCar.speed = 0;
-        playerCar.targetSpeed = 0;
+    // Check for close NPC cars in the same lane
+    for (const npc of npcCars) {
+        if (npc.lane === playerCar.lane) {
+            const distance = Math.abs(npc.y - playerCar.y);
+            
+            // If too close, force slow down
+            if (distance < 60 && npc.y < playerCar.y) {
+                playerCar.speed = Math.max(playerCar.speed - 1, npc.speed - 10);
+                
+                // If extremely close, game over
+                if (distance < 10) {
+                    gameOver("You rear-ended another car!");
+                    return;
+                }
+            }
+            
+            // Bonus points opportunity
+            if (distance < 100 && distance > 50 && !npc.bonusGiven) {
+                // Player can get bonus by changing lanes before getting too close
+                npc.bonusOpportunity = true;
+            }
+            
+            // Award bonus if player changes lanes proactively
+            if (npc.bonusOpportunity && playerCar.lane !== npc.lane && !npc.bonusGiven) {
+                gameState.bonusPoints += 10;
+                npc.bonusGiven = true;
+            }
+        }
     }
 }
 
-function showNotification(message) {
-    // Would implement notification display here
-    console.log(message);
+// Check collisions
+function checkCollisions() {
+    // Check collision with NPC cars
+    for (const npc of npcCars) {
+        if (npc.lane === playerCar.lane && 
+            Math.abs(npc.y - playerCar.y) < (CAR_HEIGHT * 0.8)) {
+            gameOver("You collided with another car!");
+            return;
+        }
+    }
 }
 
-// --------- Spawning Functions ---------
-    function spawnNPCCar() {
-    // Determine occupied lanes near the top
-    const occupiedLanes = npcCars
-        .filter(car => car.y < 150)
-        .map(car => car.lane);
+// Update score
+function updateScore() {
+    gameState.timeElapsed++;
+    if (gameState.timeElapsed % 60 === 0) { // Roughly once per second
+        gameState.score++;
+    }
+    
+    scoreDisplay.textContent = `Score: ${gameState.score + gameState.bonusPoints}`;
+}
 
-    // Choose a random free lane
-    const availableLanes = [0, 1, 2, 3].filter(lane => !occupiedLanes.includes(lane));
+// Spawning functions
+function spawnNPC() {
+    if (!gameState.playing || gameState.paused) return;
+    
+    // Determine which lane to spawn in
+    // Ensure there's always at least one free lane
+    const busyLanes = new Set(npcCars.map(car => car.lane));
+    
+    // If already 3+ lanes with cars, don't spawn more
+    if (busyLanes.size >= LANE_COUNT - 1) return;
+    
+    // Find available lanes
+    const availableLanes = [];
+    for (let i = 0; i < LANE_COUNT; i++) {
+        // Check if lane is free or if there's no NPC close to the top of the screen in this lane
+        const laneIsClear = !npcCars.some(car => car.lane === i && car.y < 100);
+        if (laneIsClear) {
+            availableLanes.push(i);
+        }
+    }
+    
     if (availableLanes.length === 0) return;
-
+    
+    // Randomly select lane from available lanes
     const lane = availableLanes[Math.floor(Math.random() * availableLanes.length)];
-
-    const car = {
-        x: LANE_POSITIONS[lane],
-        y: -100,
-        width: 30,
-        height: 50,
+    
+    npcCars.push({
+        x: lane * LANE_WIDTH + (LANE_WIDTH / 2) - (CAR_WIDTH / 2),
+        y: -CAR_HEIGHT,
         lane: lane,
-        speed: Math.random() * (MAX_SPEED - 30) + 30,
-        color: '#3498db'
-    };
-
-    npcCars.push(car);
+        speed: 10 + Math.random() * 40, // Random speed between 10 and 50
+        color: `hsl(${Math.random() * 360}, 100%, 60%)`,
+        bonusOpportunity: false,
+        bonusGiven: false
+    });
 }
+
+function spawnSpeedZone() {
+    if (!gameState.playing || gameState.paused) return;
+    
+    const speedLimit = 20 + Math.floor(Math.random() * 3) * 10; // 20, 30, or 40 km/h
+    
+    speedZones.push({
+        y: -100,
+        height: 100,
+        speedLimit: speedLimit,
+        color: speedLimit <= 30 ? '#ff0000' : '#ffaa00'
+    });
+}
+
+function spawnJunction() {
+    if (!gameState.playing || gameState.paused) return;
+    
+    junctions.push({
+        y: -200,
+        height: 200,
+        playerStopped: false,
+        playerHasPriority: false
+    });
+}
+
+// Rendering
+function render() {
+    // Clear canvas
+    ctx.fillStyle = '#000';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    
+    // Draw road
+    drawRoad();
+    
+    // Draw speed zones
+    for (const zone of speedZones) {
+        ctx.fillStyle = zone.color + '33'; // Semi-transparent
+        ctx.fillRect(0, zone.y, canvas.width, zone.height);
+        
+        // Draw speed limit sign
+        ctx.fillStyle = zone.color;
+        ctx.fillRect(canvas.width - 40, zone.y + 10, 30, 30);
+        
+        ctx.fillStyle = '#fff';
+        ctx.font = '16px Arial';
+        ctx.textAlign = 'center';
+        ctx.fillText(zone.speedLimit, canvas.width - 25, zone.y + 30);
+    }
+    
+    // Draw junctions
+    for (const junction of junctions) {
+        // Draw junction background
+        ctx.fillStyle = '#333';
+        ctx.fillRect(0, junction.y, canvas.width, junction.height);
+        
+        // Draw crossing lines
+        ctx.fillStyle = '#fff';
+        for (let i = 0; i < 10; i++) {
+            ctx.fillRect(0, junction.y + i * 20, canvas.width, 10);
+        }
+        
+        // Draw stop line a bit before junction
+        ctx.fillStyle = '#fff';
+        ctx.fillRect(0, junction.y - 5, canvas.width, 5);
+        
+        // Draw traffic light
+        const lightColor = junction.playerHasPriority ? '#00ff00' : '#ff0000';
+        ctx.fillStyle = '#333';
+        ctx.fillRect(canvas.width - 30, junction.y - 50, 20, 60);
+        ctx.fillStyle = lightColor;
+        ctx.beginPath();
+        ctx.arc(canvas.width - 20, junction.y - 20, 10, 0, Math.PI * 2);
+        ctx.fill();
+    }
+    
+    // Draw NPC cars
+    for (const npc of npcCars) {
+        ctx.fillStyle = npc.color;
+        ctx.fillRect(npc.x, npc.y, CAR_WIDTH, CAR_HEIGHT);
+    }
+    
+    // Draw player car
+    ctx.fillStyle = '#000';
+    ctx.fillRect(playerCar.x, playerCar.y, CAR_WIDTH, CAR_HEIGHT);
+    
+    // Draw car details
+    ctx.fillStyle = '#0ff';
+    // Headlights
+    ctx.fillRect(playerCar.x + 5, playerCar.y, 5, 3);
+    ctx.fillRect(playerCar.x + 20, playerCar.y, 5, 3);
+    // Taillights
+    ctx.fillStyle = '#f00';
+    ctx.fillRect(playerCar.x + 5, playerCar.y + CAR_HEIGHT - 3, 5, 3);
+    ctx.fillRect(playerCar.x + 20, playerCar.y + CAR_HEIGHT - 3, 5, 3);
+    
+    // Draw HUD
+    ctx.fillStyle = '#fff';
+    ctx.font = '14px monospace';
+    ctx.textAlign = 'left';
+    ctx.fillText(`Speed: ${Math.round(playerCar.speed)} km/h`, 10, 20);
+}
+
+function drawRoad() {
+    // Draw road lanes
+    for (let i = 1; i < LANE_COUNT; i++) {
+        const x = i * LANE_WIDTH;
+        
+        // Dashed lane lines
+        ctx.strokeStyle = '#0ff';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        
+        for (let y = -roadOffset; y < canvas.height; y += 20) {
+            ctx.moveTo(x, y);
+            ctx.lineTo(x, y + 10);
+        }
+        
+        ctx.stroke();
+    }
+    
+    // Draw side guardrails
+    ctx.fillStyle = '#0ff';
+    ctx.fillRect(0, 0, 5, canvas.height);
+    ctx.fillRect(canvas.width - 5, 0, 5, canvas.height);
+}
+
+function gameOver(reason) {
+    gameState.playing = false;
+    finalScoreDisplay.textContent = `Final Score: ${gameState.score + gameState.bonusPoints}`;
+    gameOverScreen.classList.remove('hidden');
+    
+    // Add reason for game over
+    const reasonElement = document.createElement('p');
+    reasonElement.textContent = reason;
+    gameOverScreen.insertBefore(reasonElement, restartButton);
+}
+
+function restartGame() {
+    // Remove any added reason element
+    const reasonElement = gameOverScreen.querySelector('p:not(#finalScore)');
+    if (reasonElement) {
+        gameOverScreen.removeChild(reasonElement);
+    }
+    
+    init();
+}
+
+// Start the game
+init();
